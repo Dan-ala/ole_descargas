@@ -18,6 +18,7 @@ from config.settings import (
     obtener_nombre_archivo_saliente_nacional,
     DEFAULT_SALIENTES_DIR,
     DEFAULT_ENTRANTES_DIR,
+    LOCAL_OUTPUT_DIR,
     ANIO_CORTE_PREDETERMINADO,
     COHORTE_PREDETERMINADA
 )
