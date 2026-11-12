@@ -482,10 +482,10 @@ class OLEApp(tk.Tk):
         else:
             self.badge.config(text=f" v3.1 · Entrante ({corte_sel}) ", bg="#065F46", fg="#A7F3D0")
             self.lbl_info_filtro.config(
-                text=f"📌 Filtro Activo: Movilidad Entrante (Graduados que laboran en Cauca) | Cobertura: 42 Municipios | Corte: {corte_sel}"
+                text=f"📌 Filtro Activo: Movilidad Entrante ({depto_sel}) | Cohorte: {cohorte_tag} | Corte: {corte_sel} | 9 Columnas Oficiales OLE"
             )
             ruta_defecto = str(DEFAULT_ENTRANTES_DIR) if DEFAULT_ENTRANTES_DIR.exists() else str(LOCAL_OUTPUT_DIR)
-            self.btn_iniciar.config(text=f"🚀 Descargar Todos los Municipios (Entrante · {corte_sel})")
+            self.btn_iniciar.config(text=f"🚀 Procesar Entrante ({depto_sel} · {corte_sel})")
 
         self.txt_output_dir.delete(0, tk.END)
         self.txt_output_dir.insert(0, os.path.normpath(ruta_defecto))

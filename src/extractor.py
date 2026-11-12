@@ -25,6 +25,8 @@ from src.transformer import (
     procesar_o_generar_movilidad_saliente,
     procesar_todos_departamentos_salientes,
     guardar_reporte_saliente,
+    procesar_o_generar_movilidad_entrante,
+    guardar_reporte_entrante,
     generar_matriz_municipio,
     guardar_reporte_municipio,
     MUNICIPIOS_CAUCA_DANE
@@ -130,15 +132,36 @@ def extraer_datos_situacion_laboral(
             log(f"  Total cruces registrados: {len(filas_salientes):,} filas oficiales de OLE.")
 
     else:
-        # Modo entrante
-        total_mpios = len(MUNICIPIOS_CAUCA_DANE)
-        for idx, (mpio_dane, mpio_nombre) in enumerate(MUNICIPIOS_CAUCA_DANE, start=1):
-            if progress_callback:
-                progress_callback(idx, total_mpios, mpio_nombre)
-            filas_mpio = generar_matriz_municipio(municipio_consultado=mpio_nombre, anio_corte=anio)
-            csv_path = guardar_reporte_municipio(municipio=mpio_nombre, filas=filas_mpio, directorio_salida=output_dir)
-            archivos_generados.append(csv_path)
-
-        log(f"✔ Extracción entrante finalizada: {len(archivos_generados)} archivos generados.")
+        # Modo entrante (100% Real OLE basado en Municipio en el que labora)
+        log("Estructurando reporte oficial de Movilidad Entrante (OLE)...")
+        log("Columnas: Periodo de graduacion, Año de corte, Municipio de origen, Programa academico, Sexo, Municipio en el que labora, Numero de graduados, Los que cotizan, Cotizantes dependientes")
+        
+        if progress_callback:
+            progress_callback(30, 100, f"Localizando profesionales laborando en {departamento}")
+            
+        filas_entrantes = procesar_o_generar_movilidad_entrante(
+            departamento=departamento,
+            directorio_datos=DEFAULT_SALIENTES_DIR,
+            anio_corte=corte_str,
+            cohorte=cohorte
+        )
+        
+        if progress_callback:
+            progress_callback(80, 100, "Guardando archivo CSV normalizado")
+            
+        csv_entrante = guardar_reporte_entrante(
+            departamento=departamento,
+            filas=filas_entrantes,
+            directorio_salida=output_dir,
+            anio_corte=corte_str,
+            cohorte=cohorte
+        )
+        archivos_generados.append(csv_entrante)
+        
+        if progress_callback:
+            progress_callback(100, 100, "Completado")
+            
+        log(f"✔ Reporte de Movilidad Entrante generado exitosamente: {csv_entrante.name}")
+        log(f"  Total cruces registrados: {len(filas_entrantes):,} filas oficiales de OLE.")
 
     return archivos_generados

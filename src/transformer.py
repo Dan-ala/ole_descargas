@@ -16,6 +16,8 @@ from config.settings import (
     FILENAME_TEMPLATE_SALIENTE_NACIONAL,
     obtener_nombre_archivo_saliente,
     obtener_nombre_archivo_saliente_nacional,
+    obtener_nombre_archivo_entrante,
+    obtener_nombre_archivo_entrante_nacional,
     DEFAULT_SALIENTES_DIR,
     DEFAULT_ENTRANTES_DIR,
     LOCAL_OUTPUT_DIR,
@@ -551,39 +553,177 @@ def guardar_reporte_saliente(
 
 
 # ==============================================================================
-# FLUXO 2: MOVILIDAD ENTRANTE (Para complementar)
+# FLUJO 2: MOVILIDAD ENTRANTE (100% Real - Basado en Municipio en el que labora)
 # ==============================================================================
 
+MAPA_DEPARTAMENTO_DANE = {
+    "antioquia": "05",
+    "atlantico": "08",
+    "bogota": "11",
+    "bogotadc": "11",
+    "distritocapital": "11",
+    "bolivar": "13",
+    "boyaca": "15",
+    "caldas": "17",
+    "caqueta": "18",
+    "cauca": "19",
+    "cesar": "20",
+    "cordoba": "23",
+    "cundinamarca": "25",
+    "choco": "27",
+    "huila": "41",
+    "laguajira": "44",
+    "guajira": "44",
+    "magdalena": "47",
+    "meta": "50",
+    "narino": "52",
+    "nortedesantander": "54",
+    "nortesantander": "54",
+    "quindio": "63",
+    "risaralda": "66",
+    "santander": "68",
+    "sucre": "70",
+    "tolima": "73",
+    "valledelcauca": "76",
+    "valle": "76",
+    "arauca": "81",
+    "casanare": "85",
+    "putumayo": "86",
+    "sanandres": "88",
+    "sanandresyprovidencia": "88",
+    "amazonas": "91",
+    "guainia": "94",
+    "guaviare": "95",
+    "vaupes": "97",
+    "vichada": "99"
+}
+
+
+def obtener_base_nacional_completa(directorio_datos: Path = DEFAULT_SALIENTES_DIR):
+    """
+    Carga y consolida en memoria todos los departamentos salientes disponibles
+    (excluyendo archivos espejo o de consolidado) para formar la base nacional.
+    """
+    import pandas as pd
+    carpetas = [directorio_datos, DEFAULT_SALIENTES_DIR, LOCAL_OUTPUT_DIR]
+    archivos = []
+    
+    for c in carpetas:
+        if c and c.exists():
+            candidatos = [
+                f for f in c.glob("OLE_Movilidad_*_Saliente_*.csv")
+                if not f.name.endswith("_py.csv") and "Consolidado" not in f.name and "salario" not in f.name.lower()
+            ]
+            for cand in candidatos:
+                if cand.name not in [a.name for a in archivos]:
+                    archivos.append(cand)
+                    
+    dfs = [parse_archivo_saliente_individual(f) for f in archivos]
+    if not dfs:
+        raise FileNotFoundError("No se encontraron archivos de movilidad saliente para derivar la movilidad entrante.")
+        
+    return pd.concat(dfs, ignore_index=True).drop_duplicates(subset=COLUMNAS_OFICIALES_SALIENTE)
+
+
+def procesar_o_generar_movilidad_entrante(
+    departamento: str = "Cauca",
+    directorio_datos: Path = DEFAULT_SALIENTES_DIR,
+    anio_corte: str = ANIO_CORTE_PREDETERMINADO,
+    cohorte: str = COHORTE_PREDETERMINADA
+) -> List[Dict[str, Any]]:
+    """
+    Genera el reporte oficial de Movilidad Entrante con las 9 columnas oficiales
+    filtrando los profesionales que laboran en el departamento/municipio consultado.
+    """
+    import pandas as pd
+    df_nacional = obtener_base_nacional_completa(directorio_datos)
+    
+    es_nacional = departamento.strip().lower() in ["colombia", "nacional", "todos", "all", "toda colombia"]
+    
+    if es_nacional:
+        df_filtrado = df_nacional
+    else:
+        norm = normalizar_texto(departamento).lower().replace(" ", "").replace("_", "").replace("-", "").replace(".", "")
+        codigo_dane = MAPA_DEPARTAMENTO_DANE.get(norm)
+        col_labora = df_nacional["Municipio en el que labora"].astype(str)
+        
+        if codigo_dane:
+            # Caso especial Bogotá (código 11) o Santander vs Norte de Santander
+            if codigo_dane == "68":  # Santander
+                df_filtrado = df_nacional[col_labora.str.startswith("68") & ~col_labora.str.startswith("54")]
+            else:
+                df_filtrado = df_nacional[col_labora.str.startswith(codigo_dane)]
+        else:
+            # Búsqueda por nombre de municipio o departamento
+            df_filtrado = df_nacional[col_labora.str.lower().str.contains(norm)]
+            
+    # Filtrar por año de corte si se especifica
+    if anio_corte:
+        corte_str = str(anio_corte).split()[0].strip()
+        if corte_str.isdigit():
+            df_filtrado = df_filtrado[df_filtrado["Año de corte"].astype(str).str.contains(corte_str, na=False)]
+            
+    # Filtrar por cohorte si se especifica
+    if cohorte:
+        cohorte_str = str(cohorte).strip()
+        if "desde" not in cohorte_str.lower() and cohorte_str.lower() not in ["todas", "all", ""]:
+            c_clean = cohorte_str.split()[0].strip()
+            df_filtrado = df_filtrado[df_filtrado["Periodo de graduacion"].astype(str).str.contains(c_clean, na=False)]
+            
+    df_final = df_filtrado.drop_duplicates(subset=COLUMNAS_OFICIALES_SALIENTE)
+    return df_final[COLUMNAS_OFICIALES_SALIENTE].to_dict(orient="records")
+
+
+def guardar_reporte_entrante(
+    departamento: str,
+    filas: List[Dict[str, Any]],
+    directorio_salida: Path = DEFAULT_ENTRANTES_DIR,
+    anio_corte: str = ANIO_CORTE_PREDETERMINADO,
+    cohorte: str = COHORTE_PREDETERMINADA
+) -> Path:
+    """
+    Guarda el reporte oficial de Movilidad Entrante normalizado a las 9 columnas oficiales
+    con codificación UTF-8 con BOM.
+    """
+    import csv
+    nombre_archivo = obtener_nombre_archivo_entrante(departamento, cohorte=cohorte, anio_corte=anio_corte)
+    directorio_salida.mkdir(parents=True, exist_ok=True)
+    archivo_csv = directorio_salida / nombre_archivo
+    
+    filas_limpias = []
+    for fila in filas:
+        fila_limpia = {}
+        for col in COLUMNAS_OFICIALES_SALIENTE:
+            val = fila.get(col, "")
+            val_mojibake = reparar_mojibake(val)
+            if col in ["Numero de graduados", "Los que cotizan", "Cotizantes dependientes"]:
+                try:
+                    val_mojibake = int(val_mojibake)
+                except (ValueError, TypeError):
+                    val_mojibake = 0
+            fila_limpia[col] = val_mojibake
+        filas_limpias.append(fila_limpia)
+        
+    try:
+        with open(archivo_csv, mode="w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.DictWriter(f, fieldnames=COLUMNAS_OFICIALES_SALIENTE)
+            writer.writeheader()
+            writer.writerows(filas_limpias)
+    except PermissionError:
+        archivo_alt = directorio_salida / nombre_archivo.replace(".csv", "_Actualizado.csv")
+        with open(archivo_alt, mode="w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.DictWriter(f, fieldnames=COLUMNAS_OFICIALES_SALIENTE)
+            writer.writeheader()
+            writer.writerows(filas_limpias)
+        return archivo_alt
+        
+    return archivo_csv
+
+
+# Compatibilidad hacia atrás con firmas anteriores
 def generar_matriz_municipio(municipio_consultado: str, anio_corte: str = "2023") -> List[Dict[str, Any]]:
-    filas = []
-    mpio_formateado = normalizar_nombre_municipio(municipio_consultado)
-    for carrera in PROGRAMAS_CON_CODIGO[:8]:
-        for origen_mpio in ["Cali", "Palmira", "Pasto", "Bogota D.C."]:
-            filas.append({
-                "Municipio_Consultado": mpio_formateado,
-                "Carrera": carrera,
-                "Municipio_Origen_Estudiante": origen_mpio,
-                "Donde_Labora_Municipio": mpio_formateado,
-                "Cohorte_Graduacion": "Desde 2017",
-                "Anio_Cotizacion": anio_corte,
-                "Total_Graduados": 10,
-                "Cotizantes_Activos": 8
-            })
-    return filas
+    return procesar_o_generar_movilidad_entrante(departamento=municipio_consultado, anio_corte=anio_corte)
 
 
 def guardar_reporte_municipio(municipio: str, filas: List[Dict[str, Any]], directorio_salida: Path) -> Path:
-    nombre_formateado = normalizar_nombre_municipio(municipio).replace(" ", "_")
-    archivo_csv = directorio_salida / FILENAME_TEMPLATE_ENTRANTE.format(municipio=nombre_formateado)
-    directorio_salida.mkdir(parents=True, exist_ok=True)
-    
-    columnas = [
-        "Municipio_Consultado", "Carrera", "Municipio_Origen_Estudiante",
-        "Donde_Labora_Municipio", "Cohorte_Graduacion", "Anio_Cotizacion",
-        "Total_Graduados", "Cotizantes_Activos"
-    ]
-    with open(archivo_csv, mode="w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=columnas, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(filas)
-    return archivo_csv
+    return guardar_reporte_entrante(departamento=municipio, filas=filas, directorio_salida=directorio_salida)

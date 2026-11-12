@@ -123,7 +123,8 @@ LISTA_COHORTES = [
 ]
 
 # Plantillas de nombres de archivo
-FILENAME_TEMPLATE_ENTRANTE = "OLE_Movilidad_{municipio}_Entrante_desde_2017_solo_2023_MPIO.csv"
+FILENAME_TEMPLATE_ENTRANTE = "OLE_Movilidad_{departamento}_Entrante_desde_2017_solo_2023_MPIO.csv"
+FILENAME_TEMPLATE_ENTRANTE_NACIONAL = "OLE_Movilidad_Colombia_Consolidado_Entrante_desde_2017_solo_2023_MPIO.csv"
 FILENAME_TEMPLATE_SALIENTE = "OLE_Movilidad_{departamento}_Saliente_desde_2017_solo_2023_MPIO.csv"
 FILENAME_TEMPLATE_SALIENTE_NACIONAL = "OLE_Movilidad_Colombia_Consolidado_Saliente_desde_2017_solo_2023_MPIO.csv"
 
@@ -140,4 +141,18 @@ def obtener_nombre_archivo_saliente_nacional(cohorte: str = "Desde 2017", anio_c
     cohorte_clean = "desde_2017" if "desde" in str(cohorte).lower() else f"cohorte_{cohorte}"
     corte_clean = str(anio_corte).split()[0].strip()
     return f"OLE_Movilidad_Colombia_Consolidado_Saliente_{cohorte_clean}_solo_{corte_clean}_MPIO.csv"
+
+
+def obtener_nombre_archivo_entrante(departamento: str, cohorte: str = "Desde 2017", anio_corte: str = "2023") -> str:
+    """Genera el nombre de archivo CSV estandarizado para movilidad entrante según cohorte y corte."""
+    cohorte_clean = "desde_2017" if "desde" in str(cohorte).lower() else f"cohorte_{cohorte}"
+    corte_clean = str(anio_corte).split()[0].strip()
+    return f"OLE_Movilidad_{departamento}_Entrante_{cohorte_clean}_solo_{corte_clean}_MPIO.csv"
+
+
+def obtener_nombre_archivo_entrante_nacional(cohorte: str = "Desde 2017", anio_corte: str = "2023") -> str:
+    """Genera el nombre de archivo CSV consolidado nacional entrante según cohorte y corte."""
+    cohorte_clean = "desde_2017" if "desde" in str(cohorte).lower() else f"cohorte_{cohorte}"
+    corte_clean = str(anio_corte).split()[0].strip()
+    return f"OLE_Movilidad_Colombia_Consolidado_Entrante_{cohorte_clean}_solo_{corte_clean}_MPIO.csv"
 
