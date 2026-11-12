@@ -310,12 +310,12 @@ def resolver_archivos_departamento(
     carpetas_busqueda = [
         directorio_datos,
         DEFAULT_SALIENTES_DIR,
+        DEFAULT_SALIENTES_DIR.parent if DEFAULT_SALIENTES_DIR else None,
+        DEFAULT_ENTRANTES_DIR,
+        # Respaldo transitorio para carpetas históricas (solo si existen en el sistema)
         Path.home() / "uniminuto.edu" / "G- Storage OEDE - VAC - FUENTES" / "SNIES" / "OLE" / "Archivos" / "Update 2023",
         Path.home() / "uniminuto.edu" / "G- Storage OEDE - VAC - FUENTES" / "SNIES" / "OLE" / "Archivos" / "From2017_To2022",
-        Path(r"C:\Users\daniel.alarcon.f\uniminuto.edu\G- Storage OEDE - VAC - FUENTES\SNIES\OLE\Archivos\Update 2023"),
-        Path(r"C:\Users\daniel.alarcon.f\uniminuto.edu\G- Storage OEDE - VAC - FUENTES\SNIES\OLE\Archivos\From2017_To2022"),
-        DEFAULT_SALIENTES_DIR.parent,
-        DEFAULT_SALIENTES_DIR.parent / "ENTRANTES"
+        LOCAL_OUTPUT_DIR
     ]
 
     archivos_encontrados = []

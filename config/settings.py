@@ -9,15 +9,38 @@ LOCAL_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Rutas oficiales en OneDrive / SharePoint (Resueltas dinámicamente según el usuario de Windows)
 def _resolver_ruta_oficial(subcarpeta: str) -> Path:
+    # 1. Variable de entorno personalizada si el usuario o pipeline la define
+    env_dir = os.getenv(f"OLE_{subcarpeta.upper()}_DIR") or os.getenv("OLE_OUTPUT_DIR")
+    if env_dir and Path(env_dir).exists():
+        return Path(env_dir)
+
+    # 2. Rutas dinámicas en OneDrive / SharePoint del usuario activo o cualquier perfil local
+    rel_path = Path("uniminuto.edu") / "G- Storage OEDE - VAC - FUENTES_T" / "OLE" / "Archivos" / "MOVILIDAD" / subcarpeta
     candidatos = [
-        Path.home() / "uniminuto.edu" / "G- Storage OEDE - VAC - FUENTES_T" / "OLE" / "Archivos" / "MOVILIDAD" / subcarpeta,
-        Path(rf"C:\Users\daniel.alarcon.f\uniminuto.edu\G- Storage OEDE - VAC - FUENTES_T\OLE\Archivos\MOVILIDAD\{subcarpeta}"),
-        LOCAL_OUTPUT_DIR
+        Path.home() / rel_path,
+        Path.home() / "OneDrive - UNIMINUTO" / "G- Storage OEDE - VAC - FUENTES_T" / "OLE" / "Archivos" / "MOVILIDAD" / subcarpeta,
     ]
+    
+    # Escaneo en perfiles de C:\Users por si la máquina es compartida
+    try:
+        users_root = Path("C:/Users")
+        if users_root.exists():
+            for u in users_root.iterdir():
+                cand = u / rel_path
+                if cand not in candidatos:
+                    candidatos.append(cand)
+    except Exception:
+        pass
+
     for c in candidatos:
-        if c.exists():
-            return c
-    return candidatos[0]
+        try:
+            if c.exists():
+                return c
+        except Exception:
+            continue
+
+    # 3. Fallback universal garantizado: siempre la carpeta local del proyecto
+    return LOCAL_OUTPUT_DIR
 
 DEFAULT_ENTRANTES_DIR = _resolver_ruta_oficial("ENTRANTES")
 DEFAULT_SALIENTES_DIR = _resolver_ruta_oficial("SALIENTES")
