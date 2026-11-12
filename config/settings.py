@@ -7,13 +7,20 @@ DATA_DIR = BASE_DIR / "data"
 LOCAL_OUTPUT_DIR = DATA_DIR / "salida"
 LOCAL_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Rutas oficiales en OneDrive / SharePoint
-DEFAULT_ENTRANTES_DIR = Path(
-    r"C:\Users\daniel.alarcon.f\uniminuto.edu\G- Storage OEDE - VAC - FUENTES_T\OLE\Archivos\MOVILIDAD\ENTRANTES"
-)
-DEFAULT_SALIENTES_DIR = Path(
-    r"C:\Users\daniel.alarcon.f\uniminuto.edu\G- Storage OEDE - VAC - FUENTES_T\OLE\Archivos\MOVILIDAD\SALIENTES"
-)
+# Rutas oficiales en OneDrive / SharePoint (Resueltas dinámicamente según el usuario de Windows)
+def _resolver_ruta_oficial(subcarpeta: str) -> Path:
+    candidatos = [
+        Path.home() / "uniminuto.edu" / "G- Storage OEDE - VAC - FUENTES_T" / "OLE" / "Archivos" / "MOVILIDAD" / subcarpeta,
+        Path(rf"C:\Users\daniel.alarcon.f\uniminuto.edu\G- Storage OEDE - VAC - FUENTES_T\OLE\Archivos\MOVILIDAD\{subcarpeta}"),
+        LOCAL_OUTPUT_DIR
+    ]
+    for c in candidatos:
+        if c.exists():
+            return c
+    return candidatos[0]
+
+DEFAULT_ENTRANTES_DIR = _resolver_ruta_oficial("ENTRANTES")
+DEFAULT_SALIENTES_DIR = _resolver_ruta_oficial("SALIENTES")
 DEFAULT_USER_OUTPUT_DIR = DEFAULT_SALIENTES_DIR
 
 # Archivos de persistencia de sesión y caché de cortes OLE
