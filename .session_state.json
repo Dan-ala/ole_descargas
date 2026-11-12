@@ -1,0 +1,55 @@
+{
+  "cookies": [
+    {
+      "name": "O3-CLIENT-SSO-ID",
+      "value": "rrhSSxaCpOwcQycLOFWTVBxVVyxnlg40",
+      "domain": "bi.mineducacion.gov.co",
+      "path": "/o3-rest",
+      "expires": 1794440837.03675,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "JSESSIONID",
+      "value": "VP-L3jCxo92NIJtYpGCFbydE",
+      "domain": "bi.mineducacion.gov.co",
+      "path": "/o3web",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "CASTGC",
+      "value": "TGT-2-cQfiEiaNtdlSmwwBOteM47yZ3MNUGRpGsunUZlz4cizSfPkYC5-cas01.example.org",
+      "domain": "bi.mineducacion.gov.co",
+      "path": "/cas/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "JSESSIONID",
+      "value": "dHvMASPsHc3jQ0ZOrcMltkL3",
+      "domain": "bi.mineducacion.gov.co",
+      "path": "/cas",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "cookiesession1",
+      "value": "678B29033C9F94E0E729083B02A6F13E",
+      "domain": "bi.mineducacion.gov.co",
+      "path": "/",
+      "expires": 1825962435.326041,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": []
+}
