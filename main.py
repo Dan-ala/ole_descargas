@@ -41,6 +41,13 @@ def parse_arguments():
         help="Modo de movilidad laboral a procesar ('saliente' o 'entrante')."
     )
     parser.add_argument(
+        "--estudio",
+        type=str,
+        default="movilidad",
+        choices=["movilidad", "salarios", "salario"],
+        help="Tipo de estudio a procesar ('movilidad' de 9 columnas o 'salarios' de 8 columnas con 7 rangos SMMLV)."
+    )
+    parser.add_argument(
         "--output-dir",
         type=str,
         default=None,
@@ -79,6 +86,7 @@ def main():
     if args.cli:
         corte_final = args.anio if args.anio is not None else args.anio_corte
         print("=== MODO LÍNEA DE COMANDOS (CLI) ===")
+        print(f"Estudio: {args.estudio.upper()}")
         print(f"Modo: {args.modo.upper()}")
         print(f"Departamento: {args.departamento}")
         print(f"Año de Corte: {corte_final} | Cohorte: {args.cohorte}")
@@ -91,6 +99,7 @@ def main():
             anio_corte=corte_final,
             cohorte=args.cohorte,
             modo=args.modo,
+            tipo_estudio=args.estudio,
             logger=print
         )
     else:

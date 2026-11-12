@@ -17,6 +17,8 @@ from datetime import datetime
 from config.settings import (
     DEFAULT_SALIENTES_DIR,
     DEFAULT_ENTRANTES_DIR,
+    DEFAULT_SALARIOS_SALIENTES_DIR,
+    DEFAULT_SALARIOS_ENTRANTES_DIR,
     LOCAL_OUTPUT_DIR,
     DEPARTAMENTO_OBJETIVO,
     ANIO_CORTE_PREDETERMINADO,
@@ -82,6 +84,7 @@ class OLEApp(tk.Tk):
         self.ACCENT_GREEN = "#10B981"   # Emerald 500
         self.BORDER_COLOR = "#475569"   # Slate 600
 
+        self.estudio_var = tk.StringVar(value="movilidad")
         self.modo_var = tk.StringVar(value="saliente")
         self.depto_var = tk.StringVar(value=LISTA_DEPARTAMENTOS_COLOMBIA[0])
         self.corte_var = tk.StringVar(value=LISTA_ANIOS_CORTE[0])
@@ -154,9 +157,56 @@ class OLEApp(tk.Tk):
         )
         self.lbl_sub.pack(anchor="w", pady=(4, 0))
 
-        # 2. SELECTOR DE MODO Y ALCANCE
+        # 2. SELECTOR DE ESTUDIO, MODO Y ALCANCE
         selector_card = tk.Frame(self, bg=self.BG_CARD, padx=16, pady=12, relief="flat", highlightbackground=self.BORDER_COLOR, highlightthickness=1)
         selector_card.pack(fill="x", padx=24, pady=(0, 10))
+
+        # Selector de Tipo de Estudio (Movilidad vs Salarios)
+        estudio_row = tk.Frame(selector_card, bg=self.BG_CARD)
+        estudio_row.pack(fill="x", pady=(0, 8))
+
+        lbl_estudio_title = tk.Label(
+            estudio_row,
+            text="Estudio OLE:",
+            font=("Segoe UI", 10, "bold"),
+            bg=self.BG_CARD,
+            fg=self.TEXT_PRIMARY
+        )
+        lbl_estudio_title.pack(side="left", padx=(0, 15))
+
+        self.rb_movilidad = tk.Radiobutton(
+            estudio_row,
+            text="📊 Movilidad Laboral (9 Columnas)",
+            variable=self.estudio_var,
+            value="movilidad",
+            font=("Segoe UI", 9, "bold"),
+            bg=self.BG_CARD,
+            fg=self.TEXT_PRIMARY,
+            selectcolor=self.BG_INPUT,
+            activebackground=self.BG_CARD,
+            activeforeground="white",
+            command=self._actualizar_vista_por_modo
+        )
+        self.rb_movilidad.pack(side="left", padx=(0, 20))
+
+        self.rb_salarios = tk.Radiobutton(
+            estudio_row,
+            text="💰 Salarios (8 Columnas · 7 Rangos SMMLV)",
+            variable=self.estudio_var,
+            value="salarios",
+            font=("Segoe UI", 9, "bold"),
+            bg=self.BG_CARD,
+            fg=self.TEXT_PRIMARY,
+            selectcolor=self.BG_INPUT,
+            activebackground=self.BG_CARD,
+            activeforeground="white",
+            command=self._actualizar_vista_por_modo
+        )
+        self.rb_salarios.pack(side="left")
+
+        # Separador sutil
+        sep_estudio = tk.Frame(selector_card, bg=self.BORDER_COLOR, height=1)
+        sep_estudio.pack(fill="x", pady=(2, 8))
 
         top_sel_box = tk.Frame(selector_card, bg=self.BG_CARD)
         top_sel_box.pack(fill="x", pady=(0, 8))
@@ -456,6 +506,7 @@ class OLEApp(tk.Tk):
         self.txt_log.pack(fill="both", expand=True)
 
     def _actualizar_vista_por_modo(self):
+        estudio = self.estudio_var.get()
         modo = self.modo_var.get()
         depto_sel = self.depto_var.get()
         es_nacional = "Colombia" in depto_sel
@@ -464,28 +515,51 @@ class OLEApp(tk.Tk):
         cohorte_raw = self.cohorte_var.get()
         cohorte_tag = "Desde 2017" if "desde" in cohorte_raw.lower() else f"Cohorte {cohorte_raw.split()[0]}"
 
-        if modo == "saliente":
-            if es_nacional:
-                self.badge.config(text=f" v3.1 · Toda Colombia ({corte_sel}) ", bg="#312E81", fg="#A5B4FC")
-                self.lbl_info_filtro.config(
-                    text=f"📌 Filtro Activo: Saliente NACIONAL | Cohorte: {cohorte_tag} | Corte: {corte_sel} | 9 Columnas Oficiales OLE"
-                )
-                self.btn_iniciar.config(text=f"🚀 Consolidar Toda Colombia ({corte_sel})")
+        if estudio == "salarios":
+            if modo == "saliente":
+                if es_nacional:
+                    self.badge.config(text=f" Salarios · Nacional ({corte_sel}) ", bg="#0F766E", fg="#99F6E4")
+                    self.lbl_info_filtro.config(
+                        text=f"📌 Filtro Activo: Salarios Saliente NACIONAL | Cohorte: {cohorte_tag} | Corte: {corte_sel} | 8 Columnas Oficiales (7 Rangos SMMLV)"
+                    )
+                    self.btn_iniciar.config(text=f"🚀 Consolidar Salarios Nacional ({corte_sel})")
+                else:
+                    self.badge.config(text=f" Salarios · {depto_sel} ({corte_sel}) ", bg="#0F766E", fg="#99F6E4")
+                    self.lbl_info_filtro.config(
+                        text=f"📌 Filtro Activo: Salarios Saliente ({depto_sel}) | Cohorte: {cohorte_tag} | Corte: {corte_sel} | 8 Columnas Oficiales (7 Rangos SMMLV)"
+                    )
+                    self.btn_iniciar.config(text=f"🚀 Procesar Salarios Saliente ({depto_sel} · {corte_sel})")
+                ruta_defecto = str(DEFAULT_SALARIOS_SALIENTES_DIR)
             else:
-                self.badge.config(text=f" v3.1 · {depto_sel} ({corte_sel}) ", bg="#312E81", fg="#A5B4FC")
+                self.badge.config(text=f" Salarios · Entrante ({corte_sel}) ", bg="#065F46", fg="#A7F3D0")
                 self.lbl_info_filtro.config(
-                    text=f"📌 Filtro Activo: Movilidad Saliente ({depto_sel}) | Cohorte: {cohorte_tag} | Corte: {corte_sel} | 9 Columnas Oficiales OLE"
+                    text=f"📌 Filtro Activo: Salarios Entrante ({depto_sel}) | Cohorte: {cohorte_tag} | Corte: {corte_sel} | 8 Columnas Oficiales (7 Rangos SMMLV)"
                 )
-                self.btn_iniciar.config(text=f"🚀 Procesar Saliente ({depto_sel} · {corte_sel})")
-
-            ruta_defecto = str(DEFAULT_SALIENTES_DIR) if DEFAULT_SALIENTES_DIR.exists() else str(LOCAL_OUTPUT_DIR)
+                self.btn_iniciar.config(text=f"🚀 Procesar Salarios Entrante ({depto_sel} · {corte_sel})")
+                ruta_defecto = str(DEFAULT_SALARIOS_ENTRANTES_DIR)
         else:
-            self.badge.config(text=f" v3.1 · Entrante ({corte_sel}) ", bg="#065F46", fg="#A7F3D0")
-            self.lbl_info_filtro.config(
-                text=f"📌 Filtro Activo: Movilidad Entrante ({depto_sel}) | Cohorte: {cohorte_tag} | Corte: {corte_sel} | 9 Columnas Oficiales OLE"
-            )
-            ruta_defecto = str(DEFAULT_ENTRANTES_DIR) if DEFAULT_ENTRANTES_DIR.exists() else str(LOCAL_OUTPUT_DIR)
-            self.btn_iniciar.config(text=f"🚀 Procesar Entrante ({depto_sel} · {corte_sel})")
+            if modo == "saliente":
+                if es_nacional:
+                    self.badge.config(text=f" v3.1 · Toda Colombia ({corte_sel}) ", bg="#312E81", fg="#A5B4FC")
+                    self.lbl_info_filtro.config(
+                        text=f"📌 Filtro Activo: Saliente NACIONAL | Cohorte: {cohorte_tag} | Corte: {corte_sel} | 9 Columnas Oficiales OLE"
+                    )
+                    self.btn_iniciar.config(text=f"🚀 Consolidar Toda Colombia ({corte_sel})")
+                else:
+                    self.badge.config(text=f" v3.1 · {depto_sel} ({corte_sel}) ", bg="#312E81", fg="#A5B4FC")
+                    self.lbl_info_filtro.config(
+                        text=f"📌 Filtro Activo: Movilidad Saliente ({depto_sel}) | Cohorte: {cohorte_tag} | Corte: {corte_sel} | 9 Columnas Oficiales OLE"
+                    )
+                    self.btn_iniciar.config(text=f"🚀 Procesar Saliente ({depto_sel} · {corte_sel})")
+
+                ruta_defecto = str(DEFAULT_SALIENTES_DIR) if DEFAULT_SALIENTES_DIR.exists() else str(LOCAL_OUTPUT_DIR)
+            else:
+                self.badge.config(text=f" v3.1 · Entrante ({corte_sel}) ", bg="#065F46", fg="#A7F3D0")
+                self.lbl_info_filtro.config(
+                    text=f"📌 Filtro Activo: Movilidad Entrante ({depto_sel}) | Cohorte: {cohorte_tag} | Corte: {corte_sel} | 9 Columnas Oficiales OLE"
+                )
+                ruta_defecto = str(DEFAULT_ENTRANTES_DIR) if DEFAULT_ENTRANTES_DIR.exists() else str(LOCAL_OUTPUT_DIR)
+                self.btn_iniciar.config(text=f"🚀 Procesar Entrante ({depto_sel} · {corte_sel})")
 
         self.txt_output_dir.delete(0, tk.END)
         self.txt_output_dir.insert(0, os.path.normpath(ruta_defecto))
@@ -569,6 +643,7 @@ class OLEApp(tk.Tk):
             return
             
         self.en_ejecucion = True
+        estudio = self.estudio_var.get()
         modo = self.modo_var.get()
         depto = "Colombia" if "Colombia" in self.depto_var.get() else self.depto_var.get()
         anio_corte_sel = self.corte_var.get().split()[0].strip()
@@ -580,14 +655,14 @@ class OLEApp(tk.Tk):
         
         self.extractor_thread = threading.Thread(
             target=self._hilo_extraccion,
-            args=(ruta_salida, modo, depto, anio_corte_sel, cohorte_sel),
+            args=(ruta_salida, modo, depto, anio_corte_sel, cohorte_sel, estudio),
             daemon=True
         )
         self.extractor_thread.start()
 
-    def _hilo_extraccion(self, ruta_salida: Path, modo: str, depto: str, anio_corte: str, cohorte: str):
+    def _hilo_extraccion(self, ruta_salida: Path, modo: str, depto: str, anio_corte: str, cohorte: str, estudio: str = "movilidad"):
         try:
-            self.log(f"Iniciando proceso: MODO={modo.upper()} | OBJETIVO={depto} | CORTE={anio_corte} | COHORTE={cohorte}...")
+            self.log(f"Iniciando proceso: ESTUDIO={estudio.upper()} | MODO={modo.upper()} | OBJETIVO={depto} | CORTE={anio_corte} | COHORTE={cohorte}...")
             from src.extractor import extraer_datos_situacion_laboral
             
             archivos = extraer_datos_situacion_laboral(
@@ -596,6 +671,7 @@ class OLEApp(tk.Tk):
                 anio_corte=anio_corte,
                 cohorte=cohorte,
                 modo=modo,
+                tipo_estudio=estudio,
                 logger=self.log,
                 progress_callback=self._actualizar_progreso
             )

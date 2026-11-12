@@ -11,8 +11,13 @@ LOCAL_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 def _resolver_ruta_oficial(subcarpeta: str) -> Path:
     # 1. Variable de entorno personalizada si el usuario o pipeline la define
     env_dir = os.getenv(f"OLE_{subcarpeta.upper()}_DIR") or os.getenv("OLE_OUTPUT_DIR")
-    if env_dir and Path(env_dir).exists():
-        return Path(env_dir)
+    if env_dir:
+        try:
+            p_env = Path(env_dir)
+            if p_env.exists():
+                return p_env
+        except (OSError, PermissionError):
+            pass
 
     # 2. Rutas dinámicas en OneDrive / SharePoint del usuario activo o cualquier perfil local
     rel_path = Path("uniminuto.edu") / "G- Storage OEDE - VAC - FUENTES_T" / "OLE" / "Archivos" / "MOVILIDAD" / subcarpeta
@@ -36,7 +41,7 @@ def _resolver_ruta_oficial(subcarpeta: str) -> Path:
         try:
             if c.exists():
                 return c
-        except Exception:
+        except (OSError, PermissionError):
             continue
 
     # 3. Fallback universal garantizado: siempre la carpeta local del proyecto
@@ -46,6 +51,35 @@ DEFAULT_ENTRANTES_DIR = _resolver_ruta_oficial("ENTRANTES")
 DEFAULT_SALIENTES_DIR = _resolver_ruta_oficial("SALIENTES")
 DEFAULT_USER_OUTPUT_DIR = DEFAULT_SALIENTES_DIR
 
+# Rutas para el Módulo de Salarios
+def _resolver_ruta_salarios(subcarpeta: str) -> Path:
+    env_dir = os.getenv(f"OLE_SALARIOS_{subcarpeta.upper()}_DIR")
+    if env_dir:
+        try:
+            p_env = Path(env_dir)
+            if p_env.exists():
+                return p_env
+        except (OSError, PermissionError):
+            pass
+        
+    rel_path = Path("uniminuto.edu") / "G- Storage OEDE - VAC - FUENTES_T" / "OLE" / "Archivos" / "SALARIOS" / subcarpeta
+    candidatos = [
+        Path.home() / rel_path,
+        Path.home() / "OneDrive - UNIMINUTO" / "G- Storage OEDE - VAC - FUENTES_T" / "OLE" / "Archivos" / "SALARIOS" / subcarpeta,
+        LOCAL_OUTPUT_DIR / "SALARIOS" / subcarpeta,
+        LOCAL_OUTPUT_DIR
+    ]
+    for c in candidatos:
+        try:
+            if c.exists():
+                return c
+        except (OSError, PermissionError):
+            continue
+    return LOCAL_OUTPUT_DIR
+
+DEFAULT_SALARIOS_SALIENTES_DIR = _resolver_ruta_salarios("SALIENTES")
+DEFAULT_SALARIOS_ENTRANTES_DIR = _resolver_ruta_salarios("ENTRANTES")
+
 # Archivos de persistencia de sesión y caché de cortes OLE
 AUTH_STATE_PATH = BASE_DIR / ".session_state.json"
 ANIOS_CACHE_PATH = BASE_DIR / ".anios_ole_cache.json"
@@ -54,7 +88,7 @@ ANIOS_CACHE_PATH = BASE_DIR / ".anios_ole_cache.json"
 BASE_URL = os.getenv("OLE_BASE_URL", "http://bi.mineducacion.gov.co:8080/o3web/")
 CUBE_URL = os.getenv(
     "OLE_CUBE_URL",
-    "http://bi.mineducacion.gov.co:8080/o3web/viewdesktop.jsp?cmnd=open&source=Situacion+laboral"
+    "http://bi.mineducacion.gov.co:8080/o3web/viewdesktop.jsp?cmnd=open&source=Situacion_laboral%2FVista_Migraci%F3n_vl%23_public"
 )
 
 # Credenciales de acceso
@@ -155,4 +189,41 @@ def obtener_nombre_archivo_entrante_nacional(cohorte: str = "Desde 2017", anio_c
     cohorte_clean = "desde_2017" if "desde" in str(cohorte).lower() else f"cohorte_{cohorte}"
     corte_clean = str(anio_corte).split()[0].strip()
     return f"OLE_Movilidad_Colombia_Consolidado_Entrante_{cohorte_clean}_solo_{corte_clean}_MPIO.csv"
+
+
+# ------------------------------------------------------------------------------
+# Plantillas y Nombres de Archivo para SALARIOS (8 Columnas Oficiales)
+# ------------------------------------------------------------------------------
+FILENAME_TEMPLATE_SALARIO_SALIENTE = "OLE_SALARIO_{departamento}_Saliente_desde_2017_solo_2023_MPIO.csv"
+FILENAME_TEMPLATE_SALARIO_ENTRANTE = "OLE_SALARIO_{departamento}_Entrante_desde_2017_solo_2023_MPIO.csv"
+FILENAME_TEMPLATE_SALARIO_SALIENTE_NACIONAL = "OLE_SALARIO_Colombia_Consolidado_Saliente_desde_2017_solo_2023_MPIO.csv"
+FILENAME_TEMPLATE_SALARIO_ENTRANTE_NACIONAL = "OLE_SALARIO_Colombia_Consolidado_Entrante_desde_2017_solo_2023_MPIO.csv"
+
+
+def obtener_nombre_archivo_salario_saliente(departamento: str, cohorte: str = "Desde 2017", anio_corte: str = "2023") -> str:
+    """Genera el nombre de archivo CSV estandarizado de salarios salientes."""
+    cohorte_clean = "desde_2017" if "desde" in str(cohorte).lower() else f"cohorte_{cohorte}"
+    corte_clean = str(anio_corte).split()[0].strip()
+    return f"OLE_SALARIO_{departamento}_Saliente_{cohorte_clean}_solo_{corte_clean}_MPIO.csv"
+
+
+def obtener_nombre_archivo_salario_entrante(departamento: str, cohorte: str = "Desde 2017", anio_corte: str = "2023") -> str:
+    """Genera el nombre de archivo CSV estandarizado de salarios entrantes."""
+    cohorte_clean = "desde_2017" if "desde" in str(cohorte).lower() else f"cohorte_{cohorte}"
+    corte_clean = str(anio_corte).split()[0].strip()
+    return f"OLE_SALARIO_{departamento}_Entrante_{cohorte_clean}_solo_{corte_clean}_MPIO.csv"
+
+
+def obtener_nombre_archivo_salario_saliente_nacional(cohorte: str = "Desde 2017", anio_corte: str = "2023") -> str:
+    """Genera el nombre de archivo CSV consolidado nacional de salarios salientes."""
+    cohorte_clean = "desde_2017" if "desde" in str(cohorte).lower() else f"cohorte_{cohorte}"
+    corte_clean = str(anio_corte).split()[0].strip()
+    return f"OLE_SALARIO_Colombia_Consolidado_Saliente_{cohorte_clean}_solo_{corte_clean}_MPIO.csv"
+
+
+def obtener_nombre_archivo_salario_entrante_nacional(cohorte: str = "Desde 2017", anio_corte: str = "2023") -> str:
+    """Genera el nombre de archivo CSV consolidado nacional de salarios entrantes."""
+    cohorte_clean = "desde_2017" if "desde" in str(cohorte).lower() else f"cohorte_{cohorte}"
+    corte_clean = str(anio_corte).split()[0].strip()
+    return f"OLE_SALARIO_Colombia_Consolidado_Entrante_{cohorte_clean}_solo_{corte_clean}_MPIO.csv"
 
