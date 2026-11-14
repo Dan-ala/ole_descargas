@@ -91,7 +91,8 @@ def registrar_ejecucion(
     archivos_generados: Optional[List[Union[Path, str]]] = None,
     error: Optional[str] = None,
     output_dir: Optional[Union[Path, str]] = None,
-    filas_por_departamento: Optional[Dict[str, int]] = None
+    filas_por_departamento: Optional[Dict[str, int]] = None,
+    tipo_error: Optional[str] = None
 ) -> Path:
     """
     Añade UNA línea JSON al archivo ejecuciones.jsonl dentro de la carpeta ETL/.
@@ -105,6 +106,7 @@ def registrar_ejecucion(
     - parametros: diccionario sanitizado (departamento, cohorte, anio_corte, modo, tipo_estudio)
     - archivos: lista de archivos con nombre y número de filas
     - error: texto del error si falló, cadena vacía "" si fue exitoso
+    - tipo_error: "entrada" (datos usuario), "fuente" (error OLE/descarga/consolidación), o "" (exitoso)
     - filas_por_departamento: (opcional, consolidación nacional) desglose de filas por territorio
     """
     # 1. Normalizar fechas a ISO en zona horaria America/Bogota
@@ -156,7 +158,20 @@ def registrar_ejecucion(
                 "filas": filas
             })
 
-    # 5. Estructura final del registro
+    # 5. Determinar tipo_error si no se especificó
+    if tipo_error is not None:
+        tipo_error_final = str(tipo_error)
+    else:
+        if str(resultado).lower() == "exitoso" or not error:
+            tipo_error_final = ""
+        else:
+            err_lower = str(error).lower()
+            if "departamento no válido" in err_lower or "departamento no valido" in err_lower:
+                tipo_error_final = "entrada"
+            else:
+                tipo_error_final = "fuente"
+
+    # 6. Estructura final del registro
     registro = {
         "fuente": "OLE",
         "fecha_inicio": fecha_inicio_iso,
@@ -165,13 +180,14 @@ def registrar_ejecucion(
         "responsable": responsable,
         "parametros": parametros_limpios,
         "archivos": archivos_lista,
-        "error": str(error) if error else ""
+        "error": str(error) if error else "",
+        "tipo_error": tipo_error_final
     }
 
     if filas_por_departamento is not None:
         registro["filas_por_departamento"] = filas_por_departamento
 
-    # 6. Escribir una sola línea JSON en ejecuciones.jsonl
+    # 7. Escribir una sola línea JSON en ejecuciones.jsonl
     etl_dir = resolver_carpeta_etl(output_dir)
     jsonl_path = etl_dir / "ejecuciones.jsonl"
 

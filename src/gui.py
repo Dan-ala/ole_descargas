@@ -670,6 +670,7 @@ class OLEApp(tk.Tk):
         archivos = []
         error_msg = ""
         resultado = "fallido"
+        tipo_error = ""
         leeme_generado = None
 
         try:
@@ -707,6 +708,10 @@ class OLEApp(tk.Tk):
         except Exception as e:
             resultado = "fallido"
             error_msg = str(e)
+            if "departamento no válido" in error_msg.lower() or "departamento no valido" in error_msg.lower():
+                tipo_error = "entrada"
+            else:
+                tipo_error = "fuente"
             self.log(f"❌ ERROR: {e}")
             self.lbl_progress_status.config(text=f"Estado: Fallido - {e}")
             messagebox.showerror("Error", f"Ocurrió un error en la ejecución:\n{e}")
@@ -729,11 +734,29 @@ class OLEApp(tk.Tk):
                     archivos_generados=archivos,
                     error=error_msg,
                     output_dir=ruta_salida,
-                    filas_por_departamento=filas_por_depto
+                    filas_por_departamento=filas_por_depto,
+                    tipo_error=tipo_error
                 )
                 self.log(f"✔ Registro de ejecución guardado en: {ruta_reg}")
             except Exception as reg_err:
                 self.log(f"⚠ Error al registrar ejecución: {reg_err}")
+
+            from src.estado import escribir_estado
+            try:
+                ruta_est = escribir_estado(
+                    output_dir=ruta_salida,
+                    resultado=resultado,
+                    fecha_ejecucion=fecha_fin,
+                    anio_corte=anio_corte,
+                    departamento=depto,
+                    estudio=estudio,
+                    modo=modo,
+                    tipo_error=tipo_error
+                )
+                if ruta_est:
+                    self.log(f"✔ Estado de la fuente guardado en: {ruta_est}")
+            except Exception as est_err:
+                self.log(f"⚠ Error al escribir estado: {est_err}")
 
             self.en_ejecucion = False
             self.btn_iniciar.config(state="normal")

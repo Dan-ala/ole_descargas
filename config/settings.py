@@ -53,7 +53,7 @@ DEFAULT_USER_OUTPUT_DIR = DEFAULT_SALIENTES_DIR
 
 # Rutas para el Módulo de Salarios
 def _resolver_ruta_salarios(subcarpeta: str) -> Path:
-    env_dir = os.getenv(f"OLE_SALARIOS_{subcarpeta.upper()}_DIR")
+    env_dir = os.getenv(f"OLE_SALARIOS_{subcarpeta.upper()}_DIR") or os.getenv(f"OLE_SALARIO_{subcarpeta.upper()}_DIR")
     if env_dir:
         try:
             p_env = Path(env_dir)
@@ -62,13 +62,30 @@ def _resolver_ruta_salarios(subcarpeta: str) -> Path:
         except (OSError, PermissionError):
             pass
         
-    rel_path = Path("uniminuto.edu") / "G- Storage OEDE - VAC - FUENTES_T" / "OLE" / "Archivos" / "SALARIOS" / subcarpeta
     candidatos = [
-        Path.home() / rel_path,
+        Path.home() / "uniminuto.edu" / "G- Storage OEDE - VAC - FUENTES_T" / "OLE" / "Archivos" / "SALARIO" / subcarpeta,
+        Path.home() / "uniminuto.edu" / "G- Storage OEDE - VAC - FUENTES_T" / "OLE" / "Archivos" / "SALARIOS" / subcarpeta,
+        Path.home() / "OneDrive - UNIMINUTO" / "G- Storage OEDE - VAC - FUENTES_T" / "OLE" / "Archivos" / "SALARIO" / subcarpeta,
         Path.home() / "OneDrive - UNIMINUTO" / "G- Storage OEDE - VAC - FUENTES_T" / "OLE" / "Archivos" / "SALARIOS" / subcarpeta,
+        LOCAL_OUTPUT_DIR / "SALARIO" / subcarpeta,
         LOCAL_OUTPUT_DIR / "SALARIOS" / subcarpeta,
         LOCAL_OUTPUT_DIR
     ]
+    
+    # Escaneo en perfiles de C:\Users por si la máquina es compartida
+    try:
+        users_root = Path("C:/Users")
+        if users_root.exists():
+            for u in users_root.iterdir():
+                cand1 = u / "uniminuto.edu" / "G- Storage OEDE - VAC - FUENTES_T" / "OLE" / "Archivos" / "SALARIO" / subcarpeta
+                cand2 = u / "uniminuto.edu" / "G- Storage OEDE - VAC - FUENTES_T" / "OLE" / "Archivos" / "SALARIOS" / subcarpeta
+                if cand1 not in candidatos:
+                    candidatos.append(cand1)
+                if cand2 not in candidatos:
+                    candidatos.append(cand2)
+    except Exception:
+        pass
+
     for c in candidatos:
         try:
             if c.exists():
@@ -145,6 +162,8 @@ ANIO_CORTE_PREDETERMINADO = LISTA_ANIOS_CORTE[0].split()[0]
 ANIO_CORTE = os.getenv("OLE_ANIO_CORTE", ANIO_CORTE_PREDETERMINADO)
 COHORTE_PREDETERMINADA = "Desde 2017"
 DEPARTAMENTO_OBJETIVO = os.getenv("OLE_DEPARTAMENTO", "Cauca")
+FRECUENCIA_VERIFICACION_DIAS = 30
+FRECUENCIA_PUBLICACION = "anual"
 
 LISTA_COHORTES = [
     "Desde 2017 (Histórico acumulado)",

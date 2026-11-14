@@ -29,10 +29,13 @@ from src.transformer import (
     procesar_todos_departamentos_salientes,
     guardar_reporte_saliente,
     procesar_o_generar_movilidad_entrante,
+    procesar_todos_departamentos_entrantes,
     guardar_reporte_entrante,
     procesar_o_generar_salarios_saliente,
+    procesar_todos_departamentos_salarios_salientes,
     guardar_reporte_salarios_saliente,
     procesar_o_generar_salarios_entrante,
+    procesar_todos_departamentos_salarios_entrantes,
     guardar_reporte_salarios_entrante,
     generar_matriz_municipio,
     guardar_reporte_municipio,
@@ -145,6 +148,7 @@ def extraer_datos_situacion_laboral(
     corte_efectivo = anio if anio is not None else anio_corte
     corte_str = str(corte_efectivo).split()[0].strip()
     es_salarios = str(tipo_estudio).lower() in ["salario", "salarios"]
+    es_nacional = departamento.strip().lower() in ["colombia", "nacional", "todos", "all", "toda colombia"]
 
     if output_dir is None:
         if es_salarios:
@@ -167,94 +171,122 @@ def extraer_datos_situacion_laboral(
         log("Estructurando reporte oficial de Salarios (8 Columnas - 7 Rangos SMMLV)...")
         log("Columnas: Periodo de graduacion, Año de corte, Municipio de origen, Programa academico, Sexo, Municipio en el que labora, Rango salarial, Cotizantes dependientes")
         
-        if modo == "saliente":
-            if progress_callback:
-                progress_callback(30, 100, f"Procesando salarios salientes ({departamento})")
-            try:
-                filas_salarios = procesar_o_generar_salarios_saliente(
-                    departamento=departamento,
-                    directorio_datos=output_dir,
-                    anio_corte=corte_str,
-                    cohorte=cohorte
-                )
-            except FileNotFoundError:
-                log(f"El archivo local de Salarios para '{departamento}' no fue encontrado. Iniciando conexión con OLE (O3 Web) para descarga automatizada...")
-                if progress_callback:
-                    progress_callback(50, 100, f"Descargando Salarios ({departamento}) desde OLE Web...")
-                from src.auth import descargar_departamento_ole_web
-                descargar_departamento_ole_web(
-                    departamento=departamento,
-                    output_dir=output_dir,
-                    tipo_estudio="salarios",
+        if es_nacional:
+            log(f"Alcance Seleccionado: TODA COLOMBIA (Consolidado Nacional Salarios - {modo.upper()})")
+            if modo == "saliente":
+                resultado_nacional = procesar_todos_departamentos_salarios_salientes(
+                    directorio_salida=output_dir,
+                    generar_consolidado_nacional=True,
                     anio_corte=corte_str,
                     cohorte=cohorte,
-                    logger=log
+                    logger=log,
+                    progress_callback=progress_callback
                 )
-                filas_salarios = procesar_o_generar_salarios_saliente(
-                    departamento=departamento,
-                    directorio_datos=output_dir,
+            else:
+                resultado_nacional = procesar_todos_departamentos_salarios_entrantes(
+                    directorio_salida=output_dir,
+                    generar_consolidado_nacional=True,
                     anio_corte=corte_str,
-                    cohorte=cohorte
+                    cohorte=cohorte,
+                    logger=log,
+                    progress_callback=progress_callback
                 )
-
-            if progress_callback:
-                progress_callback(80, 100, "Guardando archivo CSV normalizado")
-            csv_sal = guardar_reporte_salarios_saliente(
-                departamento=departamento,
-                filas=filas_salarios,
-                directorio_salida=output_dir,
-                anio_corte=corte_str,
-                cohorte=cohorte
-            )
+            ULTIMAS_FILAS_POR_DEPARTAMENTO = resultado_nacional.get("filas_por_departamento")
+            if resultado_nacional["total_registros_colombia"] == 0:
+                raise ValueError("Descarga vacía (0 filas)")
+            if resultado_nacional["ruta_consolidado_nacional"]:
+                archivos_generados.append(resultado_nacional["ruta_consolidado_nacional"])
+            log(f"✔ Consolidación Nacional de Salarios Finalizada: {resultado_nacional['total_registros_colombia']:,} registros procesados.")
+            return archivos_generados
         else:
-            # Modo entrante salarios
-            if progress_callback:
-                progress_callback(30, 100, f"Procesando salarios entrantes ({departamento})")
-            try:
-                filas_salarios = procesar_o_generar_salarios_entrante(
-                    departamento=departamento,
-                    directorio_datos=output_dir,
-                    anio_corte=corte_str,
-                    cohorte=cohorte
-                )
-            except FileNotFoundError:
-                log(f"No se encontró la base nacional de Salarios para derivar la movilidad entrante de '{departamento}'. Conectando a OLE (O3 Web) para descarga automatizada...")
+            if modo == "saliente":
                 if progress_callback:
-                    progress_callback(50, 100, "Descargando base de Salarios desde OLE Web...")
-                from src.auth import descargar_departamento_ole_web
-                descargar_departamento_ole_web(
-                    departamento="Colombia",
-                    output_dir=output_dir,
-                    tipo_estudio="salarios",
-                    anio_corte=corte_str,
-                    cohorte=cohorte,
-                    logger=log
-                )
-                filas_salarios = procesar_o_generar_salarios_entrante(
+                    progress_callback(30, 100, f"Procesando salarios salientes ({departamento})")
+                try:
+                    filas_salarios = procesar_o_generar_salarios_saliente(
+                        departamento=departamento,
+                        directorio_datos=output_dir,
+                        anio_corte=corte_str,
+                        cohorte=cohorte
+                    )
+                except FileNotFoundError:
+                    log(f"El archivo local de Salarios para '{departamento}' no fue encontrado. Iniciando conexión con OLE (O3 Web) para descarga automatizada...")
+                    if progress_callback:
+                        progress_callback(50, 100, f"Descargando Salarios ({departamento}) desde OLE Web...")
+                    from src.auth import descargar_departamento_ole_web
+                    descargar_departamento_ole_web(
+                        departamento=departamento,
+                        output_dir=output_dir,
+                        tipo_estudio="salarios",
+                        anio_corte=corte_str,
+                        cohorte=cohorte,
+                        logger=log
+                    )
+                    filas_salarios = procesar_o_generar_salarios_saliente(
+                        departamento=departamento,
+                        directorio_datos=output_dir,
+                        anio_corte=corte_str,
+                        cohorte=cohorte
+                    )
+
+                if progress_callback:
+                    progress_callback(80, 100, "Guardando archivo CSV normalizado")
+                csv_sal = guardar_reporte_salarios_saliente(
                     departamento=departamento,
-                    directorio_datos=output_dir,
+                    filas=filas_salarios,
+                    directorio_salida=output_dir,
                     anio_corte=corte_str,
                     cohorte=cohorte
                 )
+            else:
+                # Modo entrante salarios
+                if progress_callback:
+                    progress_callback(30, 100, f"Procesando salarios entrantes ({departamento})")
+                try:
+                    filas_salarios = procesar_o_generar_salarios_entrante(
+                        departamento=departamento,
+                        directorio_datos=output_dir,
+                        anio_corte=corte_str,
+                        cohorte=cohorte
+                    )
+                except FileNotFoundError:
+                    log(f"No se encontró la base nacional de Salarios para derivar la movilidad entrante de '{departamento}'. Conectando a OLE (O3 Web) para descarga automatizada...")
+                    if progress_callback:
+                        progress_callback(50, 100, "Descargando base de Salarios desde OLE Web...")
+                    from src.auth import descargar_departamento_ole_web
+                    descargar_departamento_ole_web(
+                        departamento="Colombia",
+                        output_dir=output_dir,
+                        tipo_estudio="salarios",
+                        anio_corte=corte_str,
+                        cohorte=cohorte,
+                        logger=log
+                    )
+                    filas_salarios = procesar_o_generar_salarios_entrante(
+                        departamento=departamento,
+                        directorio_datos=output_dir,
+                        anio_corte=corte_str,
+                        cohorte=cohorte
+                    )
 
+                if progress_callback:
+                    progress_callback(80, 100, "Guardando archivo CSV normalizado")
+                csv_sal = guardar_reporte_salarios_entrante(
+                    departamento=departamento,
+                    filas=filas_salarios,
+                    directorio_salida=output_dir,
+                    anio_corte=corte_str,
+                    cohorte=cohorte
+                )
+                
+            archivos_generados.append(csv_sal)
+            if len(filas_salarios) == 0 or _contar_filas_archivo(csv_sal) == 0:
+                raise ValueError("Descarga vacía (0 filas)")
             if progress_callback:
-                progress_callback(80, 100, "Guardando archivo CSV normalizado")
-            csv_sal = guardar_reporte_salarios_entrante(
-                departamento=departamento,
-                filas=filas_salarios,
-                directorio_salida=output_dir,
-                anio_corte=corte_str,
-                cohorte=cohorte
-            )
-            
-        archivos_generados.append(csv_sal)
-        if len(filas_salarios) == 0 or _contar_filas_archivo(csv_sal) == 0:
-            raise ValueError("Descarga vacía (0 filas)")
-        if progress_callback:
-            progress_callback(100, 100, "Completado")
-        log(f"✔ Reporte de Salarios generado exitosamente: {csv_sal.name}")
-        log(f"  Total cruces registrados: {len(filas_salarios):,} filas oficiales de OLE.")
-        return archivos_generados
+                progress_callback(100, 100, "Completado")
+            log(f"✔ Reporte de Salarios generado exitosamente: {csv_sal.name}")
+            log(f"  Total cruces registrados: {len(filas_salarios):,} filas oficiales de OLE.")
+            return archivos_generados
 
     # =========================================================================
     # CASO B: MÓDULO DE MOVILIDAD LABORAL (9 Columnas Oficiales)
@@ -263,10 +295,8 @@ def extraer_datos_situacion_laboral(
         log("Estructurando reporte oficial de Movilidad Saliente (OLE)...")
         log("Columnas: Periodo de graduacion, Año de corte, Municipio de origen, Programa academico, Sexo, Municipio en el que labora, Numero de graduados, Los que cotizan, Cotizantes dependientes")
         
-        es_nacional = departamento.strip().lower() in ["colombia", "nacional", "todos", "all"]
-
         if es_nacional:
-            log("Alcance Seleccionado: TODA COLOMBIA (32 Departamentos + Bogotá D.C.)")
+            log("Alcance Seleccionado: TODA COLOMBIA (32 Departamentos + Bogotá D.C. - Saliente)")
             resultado_nacional = procesar_todos_departamentos_salientes(
                 directorio_salientes=output_dir,
                 generar_consolidado_nacional=True,
@@ -330,35 +360,52 @@ def extraer_datos_situacion_laboral(
         log("Estructurando reporte oficial de Movilidad Entrante (OLE)...")
         log("Columnas: Periodo de graduacion, Año de corte, Municipio de origen, Programa academico, Sexo, Municipio en el que labora, Numero de graduados, Los que cotizan, Cotizantes dependientes")
         
-        if progress_callback:
-            progress_callback(30, 100, f"Localizando profesionales laborando en {departamento}")
+        if es_nacional:
+            log("Alcance Seleccionado: TODA COLOMBIA (32 Departamentos + Bogotá D.C. - Entrante)")
+            resultado_nacional = procesar_todos_departamentos_entrantes(
+                directorio_entrantes=output_dir,
+                generar_consolidado_nacional=True,
+                anio_corte=corte_str,
+                cohorte=cohorte,
+                logger=log,
+                progress_callback=progress_callback
+            )
+            ULTIMAS_FILAS_POR_DEPARTAMENTO = resultado_nacional.get("filas_por_departamento")
+            if resultado_nacional["total_registros_colombia"] == 0:
+                raise ValueError("Descarga vacía (0 filas)")
+            if resultado_nacional["ruta_consolidado_nacional"]:
+                archivos_generados.append(resultado_nacional["ruta_consolidado_nacional"])
+            log(f"✔ Consolidación Nacional de Movilidad Entrante Finalizada: {resultado_nacional['total_registros_colombia']:,} registros procesados.")
+        else:
+            if progress_callback:
+                progress_callback(30, 100, f"Localizando profesionales laborando en {departamento}")
+                
+            filas_entrantes = procesar_o_generar_movilidad_entrante(
+                departamento=departamento,
+                directorio_datos=DEFAULT_SALIENTES_DIR,
+                anio_corte=corte_str,
+                cohorte=cohorte
+            )
             
-        filas_entrantes = procesar_o_generar_movilidad_entrante(
-            departamento=departamento,
-            directorio_datos=DEFAULT_SALIENTES_DIR,
-            anio_corte=corte_str,
-            cohorte=cohorte
-        )
-        
-        if progress_callback:
-            progress_callback(80, 100, "Guardando archivo CSV normalizado")
+            if progress_callback:
+                progress_callback(80, 100, "Guardando archivo CSV normalizado")
+                
+            csv_entrante = guardar_reporte_entrante(
+                departamento=departamento,
+                filas=filas_entrantes,
+                directorio_salida=output_dir,
+                anio_corte=corte_str,
+                cohorte=cohorte
+            )
+            archivos_generados.append(csv_entrante)
+            if len(filas_entrantes) == 0 or _contar_filas_archivo(csv_entrante) == 0:
+                raise ValueError("Descarga vacía (0 filas)")
             
-        csv_entrante = guardar_reporte_entrante(
-            departamento=departamento,
-            filas=filas_entrantes,
-            directorio_salida=output_dir,
-            anio_corte=corte_str,
-            cohorte=cohorte
-        )
-        archivos_generados.append(csv_entrante)
-        if len(filas_entrantes) == 0 or _contar_filas_archivo(csv_entrante) == 0:
-            raise ValueError("Descarga vacía (0 filas)")
-        
-        if progress_callback:
-            progress_callback(100, 100, "Completado")
-            
-        log(f"✔ Reporte de Movilidad Entrante generado exitosamente: {csv_entrante.name}")
-        log(f"  Total cruces registrados: {len(filas_entrantes):,} filas oficiales de OLE.")
+            if progress_callback:
+                progress_callback(100, 100, "Completado")
+                
+            log(f"✔ Reporte de Movilidad Entrante generado exitosamente: {csv_entrante.name}")
+            log(f"  Total cruces registrados: {len(filas_entrantes):,} filas oficiales de OLE.")
 
     if not archivos_generados:
         raise ValueError("Descarga vacía (0 filas)")

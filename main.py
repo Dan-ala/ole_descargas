@@ -42,6 +42,7 @@ def parse_arguments():
     )
     parser.add_argument(
         "--estudio",
+        "--tipo-estudio",
         type=str,
         default="movilidad",
         choices=["movilidad", "salarios", "salario"],
@@ -77,11 +78,23 @@ def parse_arguments():
         default=COHORTE_PREDETERMINADA,
         help="Cohorte de graduación (por defecto: 'Desde 2017' o un año específico ej. 2022)."
     )
+    parser.add_argument(
+        "--verificar",
+        action="store_true",
+        help="Consulta los años de corte disponibles en OLE, actualiza corte_disponible y estado.json sin descargar archivos."
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_arguments()
+
+    if args.verificar:
+        print("=== MODO VERIFICACIÓN DE ACTUALIZACIONES OLE ===")
+        out_path = Path(args.output_dir) if args.output_dir else None
+        from src.estado import verificar_actualizaciones_ole
+        verificar_actualizaciones_ole(output_dir=out_path, logger=print, estudio=args.estudio, modo=args.modo)
+        return
 
     if args.cli:
         corte_final = args.anio if args.anio is not None else args.anio_corte
@@ -101,6 +114,7 @@ def main():
         archivos = []
         error_msg = ""
         resultado = "fallido"
+        tipo_error = ""
 
         try:
             archivos = extraer_datos_situacion_laboral(
@@ -127,6 +141,10 @@ def main():
         except Exception as e:
             resultado = "fallido"
             error_msg = str(e)
+            if "departamento no válido" in error_msg.lower() or "departamento no valido" in error_msg.lower():
+                tipo_error = "entrada"
+            else:
+                tipo_error = "fuente"
             print(f"\n❌ Error durante la ejecución: {e}", file=sys.stderr)
         finally:
             fecha_fin = datetime.now(BOGOTA_TZ)
@@ -147,11 +165,30 @@ def main():
                     archivos_generados=archivos,
                     error=error_msg,
                     output_dir=out_path,
-                    filas_por_departamento=filas_por_depto
+                    filas_por_departamento=filas_por_depto,
+                    tipo_error=tipo_error
                 )
                 print(f"✔ Registro de ejecución guardado en:\n  {ruta_registro}")
             except Exception as reg_err:
                 print(f"⚠ Error al registrar ejecución: {reg_err}", file=sys.stderr)
+
+            # Actualizar estado de la fuente OLE (solo para consolidación nacional y errores de fuente)
+            from src.estado import escribir_estado
+            try:
+                ruta_estado = escribir_estado(
+                    output_dir=out_path,
+                    resultado=resultado,
+                    fecha_ejecucion=fecha_fin,
+                    anio_corte=corte_final,
+                    departamento=args.departamento,
+                    estudio=args.estudio,
+                    modo=args.modo,
+                    tipo_error=tipo_error
+                )
+                if ruta_estado:
+                    print(f"✔ Estado de la fuente guardado en:\n  {ruta_estado}")
+            except Exception as est_err:
+                print(f"⚠ Error al escribir estado: {est_err}", file=sys.stderr)
 
         if resultado != "exitoso":
             sys.exit(1)
