@@ -91,7 +91,7 @@ CUBE_URL = os.getenv(
     "http://bi.mineducacion.gov.co:8080/o3web/viewdesktop.jsp?cmnd=open&source=Situacion_laboral%2FVista_Migraci%F3n_vl%23_public"
 )
 
-# Credenciales de acceso
+# Credenciales públicas de acceso abierto de OLE (publicadas por la fuente). Se pueden sobrescribir con las variables de entorno OLE_USER y OLE_PASSWORD.
 DEFAULT_USERNAME = os.getenv("OLE_USER", "user")
 DEFAULT_PASSWORD = os.getenv("OLE_PASSWORD", "user")
 

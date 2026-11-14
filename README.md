@@ -158,7 +158,7 @@ python main.py --cli --departamento Antioquia --output-dir "C:/MisDatos/OLE"
 ---
 
 ## 🔒 Notas Técnicas de Seguridad y Red
-* **Bypass de Bloqueo WAF (FortiWeb):** El servidor del Ministerio de Educación cuenta con un firewall de aplicaciones que bloquea llamadas automatizadas `headless` sin encabezados estándar (`Attack ID: 20000051`). El módulo `src/auth.py` implementa un perfil con Playwright que supera esta restricción de forma limpia y transparente.
+* **Automatización con navegador estándar:** Automatización con navegador estándar, respetando las condiciones de uso de la fuente. OLE ofrece acceso abierto con credenciales públicas.
 * **Variables de Entorno:** Puedes sobrescribir credenciales o rutas configurando las variables de entorno `OLE_BASE_URL`, `OLE_USER`, `OLE_PASSWORD` o editando [config/settings.py](file:///c:/Users/daniel.alarcon.f/Desktop/CADIT/OLE_DESCARGAS/config/settings.py).
 
 ---
