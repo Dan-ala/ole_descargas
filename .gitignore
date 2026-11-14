@@ -65,8 +65,12 @@ $RECYCLE.BIN/
 *~
 
 # Data outputs and large temporary files
+data/salida/
+.session_state.json
+.anios_ole_cache.json
 data/salida/*.csv
 data/salida/*_RAW.csv
 data/salida/*_Actualizado.csv
 !data/salida/.gitkeep
 
+prueba_salida/

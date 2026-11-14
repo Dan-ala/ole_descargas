@@ -91,17 +91,70 @@ def main():
         print(f"Departamento: {args.departamento}")
         print(f"Año de Corte: {corte_final} | Cohorte: {args.cohorte}")
         
-        from src.extractor import extraer_datos_situacion_laboral
+        from datetime import datetime
+        from src.extractor import extraer_datos_situacion_laboral, obtener_ultimas_filas_por_departamento
+        from src.leeme import generar_leeme
+        from src.registro import registrar_ejecucion, BOGOTA_TZ
+
         out_path = Path(args.output_dir) if args.output_dir else None
-        extraer_datos_situacion_laboral(
-            output_dir=out_path,
-            departamento=args.departamento,
-            anio_corte=corte_final,
-            cohorte=args.cohorte,
-            modo=args.modo,
-            tipo_estudio=args.estudio,
-            logger=print
-        )
+        fecha_inicio = datetime.now(BOGOTA_TZ)
+        archivos = []
+        error_msg = ""
+        resultado = "fallido"
+
+        try:
+            archivos = extraer_datos_situacion_laboral(
+                output_dir=out_path,
+                departamento=args.departamento,
+                anio_corte=corte_final,
+                cohorte=args.cohorte,
+                modo=args.modo,
+                tipo_estudio=args.estudio,
+                logger=print
+            )
+            resultado = "exitoso"
+
+            parametros = {
+                "departamento": args.departamento,
+                "anio_corte": corte_final,
+                "cohorte": args.cohorte,
+                "modo": args.modo,
+                "tipo_estudio": args.estudio,
+                "output_dir": out_path
+            }
+            leeme_generado = generar_leeme(parametros, archivos)
+            print(f"\n✔ Documento LEEME generado/actualizado exitosamente en:\n  {leeme_generado}")
+        except Exception as e:
+            resultado = "fallido"
+            error_msg = str(e)
+            print(f"\n❌ Error durante la ejecución: {e}", file=sys.stderr)
+        finally:
+            fecha_fin = datetime.now(BOGOTA_TZ)
+            parametros_reg = {
+                "departamento": args.departamento,
+                "cohorte": args.cohorte,
+                "anio_corte": corte_final,
+                "modo": args.modo,
+                "tipo_estudio": args.estudio
+            }
+            filas_por_depto = obtener_ultimas_filas_por_departamento()
+            try:
+                ruta_registro = registrar_ejecucion(
+                    fecha_inicio=fecha_inicio,
+                    fecha_fin=fecha_fin,
+                    resultado=resultado,
+                    parametros=parametros_reg,
+                    archivos_generados=archivos,
+                    error=error_msg,
+                    output_dir=out_path,
+                    filas_por_departamento=filas_por_depto
+                )
+                print(f"✔ Registro de ejecución guardado en:\n  {ruta_registro}")
+            except Exception as reg_err:
+                print(f"⚠ Error al registrar ejecución: {reg_err}", file=sys.stderr)
+
+        if resultado != "exitoso":
+            sys.exit(1)
     else:
         # Iniciar Interfaz Gráfica interactiva
         from src.gui import run_gui

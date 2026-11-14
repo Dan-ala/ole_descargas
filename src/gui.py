@@ -661,9 +661,19 @@ class OLEApp(tk.Tk):
         self.extractor_thread.start()
 
     def _hilo_extraccion(self, ruta_salida: Path, modo: str, depto: str, anio_corte: str, cohorte: str, estudio: str = "movilidad"):
+        from datetime import datetime
+        from src.extractor import extraer_datos_situacion_laboral, obtener_ultimas_filas_por_departamento
+        from src.leeme import generar_leeme
+        from src.registro import registrar_ejecucion, BOGOTA_TZ
+
+        fecha_inicio = datetime.now(BOGOTA_TZ)
+        archivos = []
+        error_msg = ""
+        resultado = "fallido"
+        leeme_generado = None
+
         try:
             self.log(f"Iniciando proceso: ESTUDIO={estudio.upper()} | MODO={modo.upper()} | OBJETIVO={depto} | CORTE={anio_corte} | COHORTE={cohorte}...")
-            from src.extractor import extraer_datos_situacion_laboral
             
             archivos = extraer_datos_situacion_laboral(
                 output_dir=ruta_salida,
@@ -675,16 +685,56 @@ class OLEApp(tk.Tk):
                 logger=self.log,
                 progress_callback=self._actualizar_progreso
             )
+            resultado = "exitoso"
+            
+            parametros = {
+                "departamento": depto,
+                "anio_corte": anio_corte,
+                "cohorte": cohorte,
+                "modo": modo,
+                "tipo_estudio": estudio,
+                "output_dir": ruta_salida
+            }
+            leeme_generado = generar_leeme(parametros, archivos)
+            self.log(f"✔ Documento LEEME generado en: {leeme_generado}")
+
             self.log("¡Proceso finalizado con total éxito!")
             self.lbl_progress_status.config(text="Estado: ¡Completado exitosamente (100%)!")
             messagebox.showinfo(
                 "Proceso Completo",
-                f"Se ha procesado exitosamente la información en:\n{ruta_salida}\n\nArchivos consolidados/generados: {len(archivos)}"
+                f"Se ha procesado exitosamente la información en:\n{ruta_salida}\n\nArchivos consolidados/generados: {len(archivos)}\n\nLEEME registrado en:\n{leeme_generado}"
             )
         except Exception as e:
-            self.log(f"ERROR: {e}")
+            resultado = "fallido"
+            error_msg = str(e)
+            self.log(f"❌ ERROR: {e}")
+            self.lbl_progress_status.config(text=f"Estado: Fallido - {e}")
             messagebox.showerror("Error", f"Ocurrió un error en la ejecución:\n{e}")
         finally:
+            fecha_fin = datetime.now(BOGOTA_TZ)
+            parametros_reg = {
+                "departamento": depto,
+                "cohorte": cohorte,
+                "anio_corte": anio_corte,
+                "modo": modo,
+                "tipo_estudio": estudio
+            }
+            filas_por_depto = obtener_ultimas_filas_por_departamento()
+            try:
+                ruta_reg = registrar_ejecucion(
+                    fecha_inicio=fecha_inicio,
+                    fecha_fin=fecha_fin,
+                    resultado=resultado,
+                    parametros=parametros_reg,
+                    archivos_generados=archivos,
+                    error=error_msg,
+                    output_dir=ruta_salida,
+                    filas_por_departamento=filas_por_depto
+                )
+                self.log(f"✔ Registro de ejecución guardado en: {ruta_reg}")
+            except Exception as reg_err:
+                self.log(f"⚠ Error al registrar ejecución: {reg_err}")
+
             self.en_ejecucion = False
             self.btn_iniciar.config(state="normal")
             self._actualizar_vista_por_modo()

@@ -7,8 +7,9 @@ Soporta:
 
 import os
 import time
+import unicodedata
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, Dict, Any
 
 from config.settings import (
     CUBE_URL,
@@ -35,8 +36,80 @@ from src.transformer import (
     guardar_reporte_salarios_entrante,
     generar_matriz_municipio,
     guardar_reporte_municipio,
-    MUNICIPIOS_CAUCA_DANE
+    MUNICIPIOS_CAUCA_DANE,
+    DEPARTAMENTOS_COLOMBIA_OFICIALES
 )
+
+# Variable global para registrar filas por departamento en la consolidación nacional
+ULTIMAS_FILAS_POR_DEPARTAMENTO: Optional[Dict[str, int]] = None
+
+
+def obtener_ultimas_filas_por_departamento() -> Optional[Dict[str, int]]:
+    """Devuelve el desglose de filas por territorio de la última consolidación nacional."""
+    global ULTIMAS_FILAS_POR_DEPARTAMENTO
+    return ULTIMAS_FILAS_POR_DEPARTAMENTO
+
+
+def _normalizar_texto_comparacion(texto: str) -> str:
+    """Normaliza quitando tildes, símbolos y espacios superfluos en minúsculas."""
+    if not texto:
+        return ""
+    nfkd = unicodedata.normalize('NFKD', str(texto))
+    sin_tildes = "".join([c for c in nfkd if not unicodedata.combining(c)])
+    limpio = "".join([c for c in sin_tildes.lower() if c.isalnum() or c.isspace()])
+    return " ".join(limpio.split())
+
+
+# Mapa oficial de validación: 32 departamentos + Bogotá D.C. + la opción Colombia
+MAPA_VALIDACION_TERRITORIOS: Dict[str, str] = {}
+for _depto in DEPARTAMENTOS_COLOMBIA_OFICIALES:
+    MAPA_VALIDACION_TERRITORIOS[_normalizar_texto_comparacion(_depto)] = _depto
+
+# Variantes y alias comunes aceptados
+MAPA_VALIDACION_TERRITORIOS["bogota"] = "Bogotá D.C."
+MAPA_VALIDACION_TERRITORIOS["bogota dc"] = "Bogotá D.C."
+MAPA_VALIDACION_TERRITORIOS["distrito capital"] = "Bogotá D.C."
+MAPA_VALIDACION_TERRITORIOS["san andres"] = "San Andrés"
+MAPA_VALIDACION_TERRITORIOS["san andres y providencia"] = "San Andrés"
+MAPA_VALIDACION_TERRITORIOS["san andres y providencia y santa catalina"] = "San Andrés"
+MAPA_VALIDACION_TERRITORIOS["valle"] = "Valle del Cauca"
+MAPA_VALIDACION_TERRITORIOS["norte de santander"] = "Norte de Santander"
+MAPA_VALIDACION_TERRITORIOS["la guajira"] = "La Guajira"
+MAPA_VALIDACION_TERRITORIOS["guajira"] = "La Guajira"
+
+# Opción nacional oficial
+MAPA_VALIDACION_TERRITORIOS["colombia"] = "Colombia"
+MAPA_VALIDACION_TERRITORIOS["toda colombia"] = "Colombia"
+MAPA_VALIDACION_TERRITORIOS["nacional"] = "Colombia"
+MAPA_VALIDACION_TERRITORIOS["todos"] = "Colombia"
+MAPA_VALIDACION_TERRITORIOS["all"] = "Colombia"
+
+
+def validar_departamento_objetivo(departamento: str) -> str:
+    """
+    Comprueba si el departamento pedido está en la lista oficial
+    (32 departamentos + Bogotá D.C. + la opción 'Colombia').
+    La comparación ignora tildes y mayúsculas.
+    Si no está, termina de inmediato con error 'Departamento no válido: <nombre>'.
+    """
+    norm = _normalizar_texto_comparacion(departamento)
+    if norm in MAPA_VALIDACION_TERRITORIOS:
+        return MAPA_VALIDACION_TERRITORIOS[norm]
+    raise ValueError(f"Departamento no válido: {departamento}")
+
+
+def _contar_filas_archivo(archivo: Path) -> int:
+    """Cuenta el número de filas de datos en un CSV descartando la cabecera."""
+    if not archivo.exists() or not archivo.is_file():
+        return 0
+    for enc in ["utf-8-sig", "latin-1", "utf-8"]:
+        try:
+            with open(archivo, "r", encoding=enc, errors="replace") as f:
+                lineas = [l for l in f if l.strip()]
+                return max(0, len(lineas) - 1)
+        except Exception:
+            continue
+    return 0
 
 
 def extraer_datos_situacion_laboral(
@@ -56,6 +129,12 @@ def extraer_datos_situacion_laboral(
     - tipo_estudio='salarios': 8 columnas oficiales (7 Rangos Salariales SMMLV y Dependientes).
     - modo='saliente' vs 'entrante'.
     """
+    # 1. Validación de departamento (antes de abrir navegador o descargar)
+    depto_canonico = validar_departamento_objetivo(departamento)
+
+    global ULTIMAS_FILAS_POR_DEPARTAMENTO
+    ULTIMAS_FILAS_POR_DEPARTAMENTO = None
+
     def log(msg: str):
         if logger:
             logger(msg)
@@ -169,6 +248,8 @@ def extraer_datos_situacion_laboral(
             )
             
         archivos_generados.append(csv_sal)
+        if len(filas_salarios) == 0 or _contar_filas_archivo(csv_sal) == 0:
+            raise ValueError("Descarga vacía (0 filas)")
         if progress_callback:
             progress_callback(100, 100, "Completado")
         log(f"✔ Reporte de Salarios generado exitosamente: {csv_sal.name}")
@@ -194,6 +275,9 @@ def extraer_datos_situacion_laboral(
                 logger=log,
                 progress_callback=progress_callback
             )
+            ULTIMAS_FILAS_POR_DEPARTAMENTO = resultado_nacional.get("filas_por_departamento")
+            if resultado_nacional["total_registros_colombia"] == 0:
+                raise ValueError("Descarga vacía (0 filas)")
             if resultado_nacional["ruta_consolidado_nacional"]:
                 archivos_generados.append(resultado_nacional["ruta_consolidado_nacional"])
             log(f"✔ Consolidación Nacional Finalizada: {resultado_nacional['total_registros_colombia']:,} registros procesados.")
@@ -232,6 +316,8 @@ def extraer_datos_situacion_laboral(
                 cohorte=cohorte
             )
             archivos_generados.append(csv_saliente)
+            if len(filas_salientes) == 0 or _contar_filas_archivo(csv_saliente) == 0:
+                raise ValueError("Descarga vacía (0 filas)")
             
             if progress_callback:
                 progress_callback(100, 100, "Completado")
@@ -265,11 +351,19 @@ def extraer_datos_situacion_laboral(
             cohorte=cohorte
         )
         archivos_generados.append(csv_entrante)
+        if len(filas_entrantes) == 0 or _contar_filas_archivo(csv_entrante) == 0:
+            raise ValueError("Descarga vacía (0 filas)")
         
         if progress_callback:
             progress_callback(100, 100, "Completado")
             
         log(f"✔ Reporte de Movilidad Entrante generado exitosamente: {csv_entrante.name}")
         log(f"  Total cruces registrados: {len(filas_entrantes):,} filas oficiales de OLE.")
+
+    if not archivos_generados:
+        raise ValueError("Descarga vacía (0 filas)")
+    for arch in archivos_generados:
+        if _contar_filas_archivo(arch) == 0:
+            raise ValueError("Descarga vacía (0 filas)")
 
     return archivos_generados

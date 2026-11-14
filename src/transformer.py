@@ -456,6 +456,8 @@ def procesar_todos_departamentos_salientes(
 
     dataframes_nacionales = []
     archivos_procesados = []
+    filas_por_departamento: Dict[str, int] = {}
+    territorios_fallidos: Dict[str, str] = {}
 
     for idx, depto in enumerate(DEPARTAMENTOS_COLOMBIA_OFICIALES, start=1):
         if progress_callback:
@@ -476,16 +478,44 @@ def procesar_todos_departamentos_salientes(
             )
             dataframes_nacionales.append(df_depto)
             archivos_procesados.extend(archivos)
-            log(f"  [{idx}/{total_deptos}] ✔ {depto}: {len(df_depto):,} registros procesados.")
+            num_filas_depto = len(df_depto)
+            filas_por_departamento[depto] = num_filas_depto
+            log(f"  [{idx}/{total_deptos}] ✔ {depto}: {num_filas_depto:,} registros procesados.")
         except Exception as e:
+            territorios_fallidos[depto] = str(e)
             log(f"  [{idx}/{total_deptos}] ⚠ No se pudo procesar {depto}: {e}")
 
-    ruta_consolidado = None
-    total_filas = sum(len(df) for df in dataframes_nacionales)
+    # =========================================================================
+    # VALIDACIONES DE CONSOLIDACIÓN NACIONAL
+    # =========================================================================
+    # (a) Comprobar que se procesaron exactamente 33 territorios
+    territorios_faltantes = [d for d in DEPARTAMENTOS_COLOMBIA_OFICIALES if d not in filas_por_departamento]
+    if len(filas_por_departamento) != 33 or territorios_faltantes:
+        faltantes_str = ", ".join(territorios_faltantes)
+        raise ValueError(
+            f"Consolidación nacional incompleta: se procesaron {len(filas_por_departamento)} de 33 territorios. "
+            f"Faltan {len(territorios_faltantes)} territorios: [{faltantes_str}]"
+        )
 
-    if generar_consolidado_nacional and dataframes_nacionales:
+    # (b) Comprobar que el total de filas del consolidado es igual a la suma de las filas de cada territorio
+    if not dataframes_nacionales:
+        raise ValueError("Descarga vacía (0 filas)")
+
+    df_nacional = pd.concat(dataframes_nacionales, ignore_index=True)
+    total_filas_consolidado = len(df_nacional)
+    suma_filas_territorios = sum(filas_por_departamento.values())
+
+    if total_filas_consolidado != suma_filas_territorios:
+        diferencia = abs(total_filas_consolidado - suma_filas_territorios)
+        raise ValueError(
+            f"Inconsistencia en consolidado nacional: el total de filas del consolidado ({total_filas_consolidado}) "
+            f"no coincide con la suma de los territorios ({suma_filas_territorios}). Diferencia: {diferencia} filas."
+        )
+
+    ruta_consolidado = None
+
+    if generar_consolidado_nacional:
         log("Unificando registros en el archivo Consolidado Nacional de Colombia...")
-        df_nacional = pd.concat(dataframes_nacionales, ignore_index=True)
         nombre_nacional = obtener_nombre_archivo_saliente_nacional(cohorte=cohorte, anio_corte=anio_corte)
         ruta_consolidado = directorio_salientes / nombre_nacional
         
@@ -503,7 +533,8 @@ def procesar_todos_departamentos_salientes(
     return {
         "archivos_departamentales": archivos_procesados,
         "ruta_consolidado_nacional": ruta_consolidado,
-        "total_registros_colombia": total_filas
+        "total_registros_colombia": total_filas_consolidado,
+        "filas_por_departamento": filas_por_departamento
     }
 
 
