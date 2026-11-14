@@ -93,7 +93,11 @@ def main():
         print("=== MODO VERIFICACIÓN DE ACTUALIZACIONES OLE ===")
         out_path = Path(args.output_dir) if args.output_dir else None
         from src.estado import verificar_actualizaciones_ole
-        verificar_actualizaciones_ole(output_dir=out_path, logger=print, estudio=args.estudio, modo=args.modo)
+        try:
+            verificar_actualizaciones_ole(output_dir=out_path, logger=print, estudio=args.estudio, modo=args.modo)
+        except Exception as e:
+            print(f"\n❌ Error en verificación de cortes: {e}", file=sys.stderr)
+            sys.exit(1)
         return
 
     if args.cli:

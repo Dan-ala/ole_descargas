@@ -3,6 +3,7 @@ Módulo de Autenticación y Gestión de Sesiones para OLE (Mineducación).
 Mantiene la sesión activa para optimizar recursos y evitar re-logins innecesarios.
 """
 
+import os
 from pathlib import Path
 from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 from config.settings import (
@@ -47,16 +48,24 @@ def ensure_authenticated_context(
             else:
                 print("[AUTH] La sesión almacenada expiró. Renovando credenciales...")
                 context.close()
-        except Exception:
+        except Exception as e:
             if context:
                 context.close()
+            err_str = str(e)
+            if "ERR_CONNECTION" in err_str or "ECONNREFUSED" in err_str or "ERR_NAME_NOT_RESOLVED" in err_str:
+                browser.close()
+                raise RuntimeError(f"No se pudo conectar con la plataforma OLE ({BASE_URL}): {e}") from e
 
     # Si no existe sesión válida, autenticar
     context = browser.new_context(user_agent=user_agent)
     page = context.new_page()
     
     print(f"[AUTH] Autenticando usuario '{username}' en la plataforma OLE...")
-    page.goto(BASE_URL, timeout=30000)
+    try:
+        page.goto(BASE_URL, timeout=30000)
+    except Exception as e:
+        browser.close()
+        raise RuntimeError(f"No se pudo conectar con la plataforma OLE ({BASE_URL}): {e}") from e
     
     if "cas/login" in page.url or page.locator("#username").is_visible():
         page.fill("#username", username)
@@ -79,6 +88,7 @@ def consultar_anios_disponibles_ole_web(headless: bool = False, logger=None) -> 
     Se conecta a la plataforma OLE (O3 Web) y consulta en vivo los años
     disponibles en la dimensión 'Año de corte' del cubo OLAP.
     Actualiza automáticamente el archivo de caché persistente (.anios_ole_cache.json).
+    Si no se puede conectar o no se detectan años, lanza una excepción.
     """
     import json
     import time
@@ -97,10 +107,13 @@ def consultar_anios_disponibles_ole_web(headless: bool = False, logger=None) -> 
         with sync_playwright() as p:
             browser, context, page = ensure_authenticated_context(p, headless=headless)
             
-            # Espera activa y elástica para detectar el frame del cubo (hasta 5 minutos)
+            # Navegar al visor del cubo si aterriza en el portal inicial
+            abrir_vista_situacion_laboral_si_es_portal(page, log)
+
+            # Espera elástica para detectar el frame del cubo
             f2 = None
             start_t = time.time()
-            while time.time() - start_t < 300:
+            while time.time() - start_t < 45:
                 for f in page.frames:
                     if "dispatcher" in f.url or "view-grid" in f.url:
                         f2 = f
@@ -116,7 +129,7 @@ def consultar_anios_disponibles_ole_web(headless: bool = False, logger=None) -> 
                 log("Accediendo a la dimensión 'Año de corte' en el cubo OLAP...")
                 btn_corte = f2.locator("div.ovfH:has-text('Año de corte')").first
                 try:
-                    btn_corte.wait_for(state="visible", timeout=30000)
+                    btn_corte.wait_for(state="visible", timeout=20000)
                     btn_corte.click()
                     page.wait_for_timeout(2500)
                 except Exception:
@@ -140,10 +153,14 @@ def consultar_anios_disponibles_ole_web(headless: bool = False, logger=None) -> 
                                 anios_detectados.append(y)
                     except Exception:
                         pass
+            else:
+                browser.close()
+                raise RuntimeError("No se pudo detectar el marco del cubo OLAP en O3 Web.")
                                 
             browser.close()
     except Exception as e:
-        log(f"⚠ Aviso al consultar O3 Web: {e}")
+        log(f"❌ Error al consultar O3 Web: {e}")
+        raise RuntimeError(f"Error de conexión con la plataforma OLE: {e}") from e
 
     # Si se detectaron años válidos, ordenar de mayor a menor y persistir en caché
     if anios_detectados:
@@ -162,7 +179,7 @@ def consultar_anios_disponibles_ole_web(headless: bool = False, logger=None) -> 
             log(f"⚠ No se pudo escribir en el archivo de caché: {e}")
         return anios_ordenados
         
-    return []
+    raise RuntimeError("No se detectaron años de corte en la dimensión 'Año de corte' de OLE.")
 
 
 def abrir_vista_situacion_laboral_si_es_portal(page: Page, log) -> bool:
@@ -175,22 +192,29 @@ def abrir_vista_situacion_laboral_si_es_portal(page: Page, log) -> bool:
     if "viewdesktop" in page.url or any("dispatcher" in f.url for f in page.frames):
         return True
 
+    cube_url = os.getenv("OLE_CUBE_URL", CUBE_URL)
     try:
         if "main.jsp" in page.url or "o3web" in page.url:
             log("En portal O3 Web. Accediendo automáticamente al visor oficial del cubo (Situación laboral)...")
-            page.goto(CUBE_URL, timeout=30000, wait_until="domcontentloaded")
+            page.goto(cube_url, timeout=30000, wait_until="domcontentloaded")
             return True
-    except Exception:
+    except Exception as e:
+        err_str = str(e)
+        if "ERR_CONNECTION" in err_str or "ECONNREFUSED" in err_str or "ERR_NAME_NOT_RESOLVED" in err_str:
+            raise RuntimeError(f"No se pudo conectar al cubo OLE ({cube_url}): {e}") from e
         pass
 
     for f in page.frames:
         try:
             if "main.jsp" in f.url or "o3web" in f.url:
                 log("En portal O3 Web (frame). Accediendo automáticamente al visor oficial del cubo (Situación laboral)...")
-                f.evaluate(f"window.top.location.href = '{CUBE_URL}'")
+                f.evaluate(f"window.top.location.href = '{cube_url}'")
                 page.wait_for_timeout(2000)
                 return True
-        except Exception:
+        except Exception as e:
+            err_str = str(e)
+            if "ERR_CONNECTION" in err_str or "ECONNREFUSED" in err_str or "ERR_NAME_NOT_RESOLVED" in err_str:
+                raise RuntimeError(f"No se pudo conectar al cubo OLE ({cube_url}): {e}") from e
             continue
     return False
 
