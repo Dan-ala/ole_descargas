@@ -113,20 +113,22 @@ def guardar_sesion_si_valida(context: BrowserContext, logger=None):
 
 def abrir_vista_situacion_laboral_si_es_portal(page: Page, log) -> bool:
     """
-    Si la página se encuentra en el portal inicial de O3 Web ('main.jsp' o 'index.jsp'),
-    navega directamente al visor oficial del cubo de 'Situación laboral' (Vista_Migración_vl)
-    que contiene tanto los datos de movilidad laboral como de salarios.
+    Si la página se encuentra en el portal inicial de O3 Web ('main.jsp' o 'index.jsp') o en una vista
+    distinta a Vista_Migración_vl, navega directamente al visor oficial del cubo de 'Situación laboral'
+    (Vista_Migración_vl) que contiene tanto los datos de movilidad laboral como de salarios.
     """
-    # Si ya se encuentra en el visor del cubo o cargando el dispatcher, no hacer nada
-    if "viewdesktop" in page.url or any("dispatcher" in f.url for f in page.frames):
+    cube_url = os.getenv("OLE_CUBE_URL", CUBE_URL)
+    es_vista_correcta = (
+        "Vista_Migraci" in page.url or
+        any("Vista_Migraci" in f.url for f in page.frames)
+    )
+    if es_vista_correcta and any("dispatcher" in f.url for f in page.frames):
         return True
 
-    cube_url = os.getenv("OLE_CUBE_URL", CUBE_URL)
     try:
-        if "main.jsp" in page.url or "o3web" in page.url:
-            log("En portal O3 Web. Accediendo automáticamente al visor oficial del cubo (Situación laboral)...")
-            page.goto(cube_url, timeout=30000, wait_until="domcontentloaded")
-            return True
+        log("Accediendo al visor oficial del cubo OLAP (Situación laboral - Vista_Migración_vl)...")
+        page.goto(cube_url, timeout=35000, wait_until="domcontentloaded")
+        return True
     except Exception as e:
         err_str = str(e)
         if "ERR_CONNECTION" in err_str or "ECONNREFUSED" in err_str or "ERR_NAME_NOT_RESOLVED" in err_str:
@@ -633,6 +635,60 @@ def descargar_departamento_ole_web(
         )
         if btn_export:
             guardar_sesion_si_valida(context, log)
+
+            es_salarios = tipo_estudio.lower() in ["salario", "salarios"]
+            es_nacional = any(n in departamento.lower() for n in ["colombia", "nacional", "todos", "all"])
+
+            # Si es estudio de Salarios, configurar medida y dimensión oficial en el cubo
+            if es_salarios and target_page:
+                log("Configurando cubo OLAP para Salarios (Medida 'Graduados cotizantes dependientes' y dimensión '7 Rangos salariales')...")
+                disp_frame = None
+                for f in target_page.frames:
+                    if "dispatcher" in f.url:
+                        disp_frame = f
+                        break
+
+                if disp_frame:
+                    try:
+                        # 1. Cambiar medida a Graduados cotizantes dependientes (ID 4)
+                        disp_frame.evaluate("""() => {
+                            if (typeof submitCommand === 'function') {
+                                submitCommand('selectDimensionElements', {
+                                    selectedPrefix: '',
+                                    dimNumber: 17,
+                                    queryType: 1,
+                                    _selection: '4'
+                                });
+                            }
+                        }""")
+                        target_page.wait_for_timeout(6000)
+                    except Exception as e_med:
+                        log(f"Aviso al configurar medida de salarios: {e_med}")
+
+                    # Re-localizar dispatcher tras recarga
+                    for f in target_page.frames:
+                        if "dispatcher" in f.url:
+                            disp_frame = f
+                            break
+
+                    if disp_frame:
+                        try:
+                            # 2. Agregar dimensión 12 (7 Rangos salariales) al eje 1 (columnas)
+                            disp_frame.evaluate("""() => {
+                                if (typeof addDimension === 'function') {
+                                    addDimension('o3_0', 1, 12, 0);
+                                }
+                            }""")
+                            target_page.wait_for_timeout(6000)
+                        except Exception as e_dim:
+                            log(f"Aviso al agregar dimensión de rangos salariales: {e_dim}")
+
+                    # 3. Re-verificar botón de exportación actualizado tras recarga
+                    _, _, btn_act, btn_title_act = esperar_visor_cubo_olap(context, timeout_segundos=45, logger=log)
+                    if btn_act:
+                        btn_export = btn_act
+                        btn_title = btn_title_act
+
             log(f"✔ Opción de exportación detectada ({btn_title}). Activando descarga...")
             export_page = None
 
@@ -651,10 +707,10 @@ def descargar_departamento_ole_web(
                 try:
                     export_page.wait_for_load_state("domcontentloaded", timeout=15000)
                     log("Confirmando generación del reporte oficial...")
-                    btn_aplicar = export_page.locator("input[value*='Aplicar'], button:has-text('Aplicar'), input[value*='Export'], button:has-text('Export'), input[type='submit']").first
+                    btn_aplicar = export_page.locator("input[type='submit'], input[value*='Apply'], input[value*='Aplicar'], button:has-text('Apply'), button:has-text('Aplicar'), input[value*='Export'], button:has-text('Export')").first
                     if btn_aplicar.count() > 0:
                         try:
-                            with export_page.expect_download(timeout=20000) as dl_info:
+                            with export_page.expect_download(timeout=25000) as dl_info:
                                 btn_aplicar.click(force=True)
                             dl = dl_info.value
                             captured_downloads.append(dl)
@@ -667,7 +723,7 @@ def descargar_departamento_ole_web(
                 for p_check in list(context.pages):
                     for f in p_check.frames:
                         try:
-                            btn_aplicar = f.locator("input[value*='Aplicar'], button:has-text('Aplicar'), input[value*='Export'], button:has-text('Export'), input[type='submit']").first
+                            btn_aplicar = f.locator("input[type='submit'], input[value*='Apply'], input[value*='Aplicar'], button:has-text('Apply'), button:has-text('Aplicar'), input[value*='Export'], button:has-text('Export')").first
                             if btn_aplicar.count() > 0 and btn_aplicar.is_visible():
                                 btn_aplicar.click(force=True)
                                 break
@@ -704,7 +760,28 @@ def descargar_departamento_ole_web(
 
             output_dir.mkdir(parents=True, exist_ok=True)
             ruta_guardado = output_dir / nombre_salida
-            download.save_as(str(ruta_guardado))
+
+            suggested = getattr(download, "suggested_filename", "").lower()
+            if (suggested.endswith(".xls") or suggested.endswith(".xlsx")) and nombre_salida.lower().endswith(".csv"):
+                ruta_temp = output_dir / f"_temp_{download.suggested_filename}"
+                download.save_as(str(ruta_temp))
+                try:
+                    if es_salarios:
+                        from src.transformer import parse_archivo_salarios_individual
+                        df_conv = parse_archivo_salarios_individual(ruta_temp, anio_corte=corte_clean, cohorte=cohorte)
+                    else:
+                        from src.transformer import parse_archivo_saliente_individual
+                        df_conv = parse_archivo_saliente_individual(ruta_temp, anio_corte=corte_clean, cohorte=cohorte)
+                    df_conv.to_csv(ruta_guardado, index=False, encoding="utf-8-sig")
+                finally:
+                    if ruta_temp.exists():
+                        try:
+                            ruta_temp.unlink()
+                        except Exception:
+                            pass
+            else:
+                download.save_as(str(ruta_guardado))
+
             log(f"✔ Descarga completada exitosamente desde OLE: {nombre_salida}")
             browser.close()
             return ruta_guardado
