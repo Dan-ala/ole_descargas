@@ -16,31 +16,12 @@ def resolver_carpeta_guia(output_dir: Optional[Union[Path, str]] = None) -> Path
     Resuelve la carpeta 'Guia/' para almacenar LEEME.txt.
     - Si la ruta pertenece a la estructura oficial institucional de OLE (con 'Archivos'),
       resuelve la carpeta 'Guia/' como hermana de 'Archivos/'.
-    - Si se guarda en otra ruta (ej. Desktop), prioriza la carpeta oficial 'Guia/' de FUENTES_T
-      si existe, para actualizar siempre el LEEME.txt institucional en lugar de crear uno nuevo.
-    - Solo si FUENTES_T no existe localmente, usa el fallback local ('data/salida/Guia/' o target/'Guia/').
+    - Si se usa el fallback local ('data/salida'), escribe en 'data/salida/Guia/'.
+    - Si no existe la carpeta, la crea.
     """
     target = Path(output_dir) if output_dir else DEFAULT_SALIENTES_DIR
 
-    # Caso 1: Ruta institucional con carpeta 'Archivos' en el output_dir dado
-    curr = target.resolve() if target.is_absolute() else target
-    while curr != curr.parent:
-        if curr.name.lower() == "archivos":
-            guia_dir = curr.parent / "Guia"
-            guia_dir.mkdir(parents=True, exist_ok=True)
-            return guia_dir
-        curr = curr.parent
-
-    # Caso 2: Si el output_dir no está dentro de 'Archivos' (ej. Desktop), usar la carpeta 'Guia/' oficial de FUENTES_T si existe
-    curr_def = DEFAULT_SALIENTES_DIR.resolve() if DEFAULT_SALIENTES_DIR.is_absolute() else DEFAULT_SALIENTES_DIR
-    while curr_def != curr_def.parent:
-        if curr_def.name.lower() == "archivos":
-            guia_dir = curr_def.parent / "Guia"
-            guia_dir.mkdir(parents=True, exist_ok=True)
-            return guia_dir
-        curr_def = curr_def.parent
-
-    # Caso 3: Fallback local (data/salida) o dentro de target si no hay FUENTES_T
+    # Caso 1: Fallback local (data/salida) o dentro de él
     try:
         if target.resolve() == LOCAL_OUTPUT_DIR.resolve() or LOCAL_OUTPUT_DIR.resolve() in target.resolve().parents:
             guia_dir = LOCAL_OUTPUT_DIR / "Guia"
@@ -49,6 +30,16 @@ def resolver_carpeta_guia(output_dir: Optional[Union[Path, str]] = None) -> Path
     except Exception:
         pass
 
+    # Caso 2: Ruta institucional con carpeta 'Archivos'
+    curr = target.resolve() if target.is_absolute() else target
+    while curr != curr.parent:
+        if curr.name.lower() == "archivos":
+            guia_dir = curr.parent / "Guia"
+            guia_dir.mkdir(parents=True, exist_ok=True)
+            return guia_dir
+        curr = curr.parent
+
+    # Caso 3: Fallback directo a Guia dentro de target
     guia_dir = target / "Guia"
     guia_dir.mkdir(parents=True, exist_ok=True)
     return guia_dir
