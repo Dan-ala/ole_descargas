@@ -24,12 +24,12 @@ from config.settings import DEFAULT_SALIENTES_DIR, LOCAL_OUTPUT_DIR
 
 def resolver_carpeta_etl(output_dir: Optional[Union[Path, str]] = None) -> Path:
     """
-    Resuelve la carpeta 'ETL/' para almacenar ejecuciones.jsonl.
-    - Si se especifica explícitamente output_dir (ej. con --output-dir), crea ETL/ dentro de esa ruta.
-    - Si pertenece a la estructura oficial institucional de OLE (con 'Archivos'),
+    Resuelve la carpeta 'ETL/' para almacenar ejecuciones.jsonl y estado.json.
+    - Si output_dir pertenece a la estructura oficial institucional de OLE (con 'Archivos'),
       resuelve 'ETL/' como hermana de 'Archivos/' y 'Guia/'.
-    - Si se usa el fallback local ('data/salida'), escribe en 'data/salida/ETL/'.
-    - Si no existe la carpeta, la crea.
+    - Si se guarda en otra ruta (ej. Desktop), prioriza siempre la carpeta oficial 'ETL/' de FUENTES_T
+      si existe, para actualizar los registros institucionales en lugar de crear una carpeta nueva.
+    - Solo si FUENTES_T no existe localmente, usa el fallback local ('data/salida/ETL/' o output_dir/'ETL/').
     """
     if output_dir:
         out_path = Path(output_dir)
@@ -40,19 +40,8 @@ def resolver_carpeta_etl(output_dir: Optional[Union[Path, str]] = None) -> Path:
                 etl_dir.mkdir(parents=True, exist_ok=True)
                 return etl_dir
             curr = curr.parent
-        etl_dir = out_path / "ETL"
-        etl_dir.mkdir(parents=True, exist_ok=True)
-        return etl_dir
 
     target = DEFAULT_SALIENTES_DIR
-    try:
-        if target.resolve() == LOCAL_OUTPUT_DIR.resolve() or LOCAL_OUTPUT_DIR.resolve() in target.resolve().parents:
-            etl_dir = LOCAL_OUTPUT_DIR / "ETL"
-            etl_dir.mkdir(parents=True, exist_ok=True)
-            return etl_dir
-    except Exception:
-        pass
-
     curr = target.resolve() if target.is_absolute() else target
     while curr != curr.parent:
         if curr.name.lower() == "archivos":
@@ -60,6 +49,20 @@ def resolver_carpeta_etl(output_dir: Optional[Union[Path, str]] = None) -> Path:
             etl_dir.mkdir(parents=True, exist_ok=True)
             return etl_dir
         curr = curr.parent
+
+    if output_dir:
+        out_path = Path(output_dir)
+        etl_dir = out_path / "ETL"
+        etl_dir.mkdir(parents=True, exist_ok=True)
+        return etl_dir
+
+    try:
+        if target.resolve() == LOCAL_OUTPUT_DIR.resolve() or LOCAL_OUTPUT_DIR.resolve() in target.resolve().parents:
+            etl_dir = LOCAL_OUTPUT_DIR / "ETL"
+            etl_dir.mkdir(parents=True, exist_ok=True)
+            return etl_dir
+    except Exception:
+        pass
 
     etl_dir = target / "ETL"
     etl_dir.mkdir(parents=True, exist_ok=True)
